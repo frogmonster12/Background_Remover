@@ -1,0 +1,19 @@
+node_modules/
+dist/
+public/models/
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Vitest
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local

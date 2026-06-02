@@ -1,0 +1,32 @@
+{
+  "name": "bg-remover-web",
+  "version": "0.1.0",
+  "description": "Browser-only AI background remover — all inference runs client-side",
+  "license": "MIT",
+  "private": false,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "lint": "eslint src --ext .ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.1",
+    "@types/node": "^22.15.0",
+    "@vitest/coverage-v8": "^4.1.8",
+    "eslint": "^9.26.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vitest": "^4.1.8",
+    "@vitest/ui": "^4.1.8",
+    "happy-dom": "^20.9.0"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.5.2"
+  }
+}
