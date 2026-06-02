@@ -2,7 +2,7 @@
 
 ## Phase 0 — Bootstrap
 
-**Status:** In progress
+**Status:** COMPLETE ✓
 
 ### Done
 - Node v24.14.1 confirmed, npm 11.15.0
@@ -12,15 +12,15 @@
 - `src/worker.ts` — dispatches to mock or real model via `__USE_REAL_MODEL__` build flag
 - Vitest (happy-dom) + Playwright (Chromium) configured
 - Test fixtures: sample.png, sample.jpg, sample.webp, hair-sample.png (placeholder)
+- ESLint v9 flat config (`eslint.config.js`) with typescript-eslint
 - MODELS.md stub, README.md stub
-
-### Next
-- Install dependencies
-- Run typecheck + unit tests + E2E smoke tests
-- Commit and unblock four parallel tracks
+- All verification passes: `typecheck` ✓, `test` 4/4 ✓, `test:e2e` 1/1 ✓, `lint` ✓
 
 ### Blockers
 - None
+
+### Contracts frozen — four tracks unblocked
+`src/contracts.ts` must not change without flagging. Tracks may proceed in parallel.
 
 ---
 
