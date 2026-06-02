@@ -13,18 +13,19 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.1",
     "@types/node": "^22.15.0",
     "@vitest/coverage-v8": "^4.1.8",
-    "eslint": "^9.26.0",
-    "typescript": "^5.8.3",
-    "vite": "^6.3.5",
-    "vitest": "^4.1.8",
     "@vitest/ui": "^4.1.8",
-    "happy-dom": "^20.9.0"
+    "eslint": "^9.26.0",
+    "happy-dom": "^20.9.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.60.1",
+    "vite": "^6.3.5",
+    "vitest": "^4.1.8"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.5.2"

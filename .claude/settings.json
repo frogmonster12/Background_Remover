@@ -7,11 +7,9 @@
       "Bash(Test-Path \"c:\\\\Users\\\\Jeff\\\\Desktop\\\\built tools\\\\bg-remover-v2\\\\PROGRESS.md\")",
       "Bash(Test-Path \"c:\\\\Users\\\\Jeff\\\\Desktop\\\\built tools\\\\bg-remover-v2\\\\MODELS.md\")",
       "Bash(npm install *)",
-      "Bash(npm audit *)",
-      "Bash(node -e \"const d=JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\); Object.values\\(d.vulnerabilities||{}\\).filter\\(v=>v.severity==='critical'\\).forEach\\(v=>console.log\\(v.name, v.severity, v.via?.map?.\\(x=>typeof x==='string'?x:x.title\\)\\)\\)\")",
-      "Bash(npm info *)",
-      "Bash(npx playwright *)",
-      "Bash(npm run *)"
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(npx playwright *)"
     ]
   }
 }
