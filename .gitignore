@@ -1,6 +1,8 @@
 node_modules/
 dist/
 public/models/
+# ORT WASM runtime (copied from node_modules by `npm run copy:ort`)
+public/ort/
 
 # Playwright
 test-results/
