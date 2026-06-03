@@ -2,6 +2,41 @@
 
 Only MIT or Apache-2.0 models. Do NOT use BRIA RMBG-1.4 / RMBG-2.0 (non-commercial).
 
-| Model | HF Repo | License | Size | Backend | Notes |
-|-------|---------|---------|------|---------|-------|
-| _(none wired yet)_ | — | — | — | — | Candidates: BiRefNet (MIT), ISNet general-use (Apache-2.0) |
+## Chosen model — ORMBG (Apache-2.0)
+
+| Field | Value |
+|-------|-------|
+| Model | ORMBG (Open Robust Matting Background Removal) |
+| HF Repo | `onnx-community/ormbg-ONNX` |
+| Base model | `schirrmacher/ormbg` |
+| License | **Apache-2.0** |
+| On-disk size | uint8: 44.3 MB · fp16: 88.1 MB · fp32: 176 MB |
+| Backend used | WASM (uint8) — WebGPU (fp16) on supported hardware |
+| Cold-load time | ~6.7s (browser-cached); first download ~44 MB over network |
+| Per-image time | ~4.2s on 512×341 WASM |
+| Hair-edge artifacts | Visual check pending (`tests/output/hair-mask.png` — see eyeball step) |
+
+### License verification
+
+`onnx-community/ormbg-ONNX` is built on `schirrmacher/ormbg` which is Apache-2.0.
+ONNX export: `onnx-community` namespace (Apache-2.0).
+No BRIA / non-commercial components.
+
+### Pipeline API
+
+```javascript
+const pipe = await pipeline('background-removal', 'onnx-community/ormbg-ONNX', { dtype: 'uint8' });
+const output = await pipe(rawImage); // returns RawImage (RGBA)
+// Alpha channel = foreground mask: 255 = keep, 0 = remove
+```
+
+---
+
+## Rejected candidates
+
+| Model | Reason |
+|-------|--------|
+| briaai/RMBG-1.4 | Non-commercial research license — prohibited |
+| briaai/RMBG-2.0 | Non-commercial research license — prohibited |
+| onnx-community/BiRefNet_lite-ONNX (MIT) | WASM forward pass crashes with Emscripten C++ exception on `/bb/layers.X/Sub` ops; loads fine in Node.js (onnxruntime-node). Likely missing CPU kernel for bilateral-branch Sub nodes in ort-web WASM. Could re-evaluate if ort-web adds the kernel. |
+| onnx-community/ISNet-ONNX | AGPL-3.0 license — not MIT or Apache-2.0, prohibited |
