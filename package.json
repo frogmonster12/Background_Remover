@@ -30,6 +30,7 @@
     "vitest": "^4.1.8"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.5.2"
+    "@huggingface/transformers": "^3.5.2",
+    "fflate": "^0.8.3"
   }
 }
