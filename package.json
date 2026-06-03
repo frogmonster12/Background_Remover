@@ -30,6 +30,7 @@
     "vitest": "^4.1.8"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.5.2"
+    "@huggingface/transformers": "^3.5.2",
+    "heic2any": "^0.0.4"
   }
 }

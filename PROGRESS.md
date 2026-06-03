@@ -53,11 +53,46 @@ proved the inference spike end-to-end. See MODELS.md for full details.
 
 ---
 
+---
+
+## Phase 3 — Compose / Canvas
+
+**Status:** COMPLETE ✓ (branch: `track/compose`)
+
+### Done
+- `src/formats.ts`: `decodeToBitmap(file)` — PNG/JPEG/WEBP/GIF via `createImageBitmap`; HEIC/HEIF
+  lazy-loaded via dynamic `import('heic2any')` (only when a HEIC file is dropped).
+  Throws typed `UnsupportedFormatError` for unsupported MIME types.
+- `src/compose.ts`:
+  - `featherMask(mask, w, h, radius)` — box-blur on the alpha channel; kills fringe halos.
+  - `applyMask(image, mask, options)` — four background modes:
+    - `transparent` — mask alpha straight through (default)
+    - `color` — solid colour fill (CSS string, hex fast-path + canvas fallback)
+    - `blur` — software two-pass box blur on the original, composited behind subject
+    - `image` — user-supplied background, cover-fit, composited behind subject
+  - `toPNG(canvas)` / `toJPEG(canvas, quality)` — `convertToBlob` wrappers.
+- `tests/setup.ts`: minimal `OffscreenCanvas` + `ImageData` polyfill for happy-dom (v20 lacks
+  these globals); pixel-accurate put/get/drawImage for the test suite.
+
+### Dependency added
+- `heic2any` v0.0.4 — ~2.7 MB unpacked; lazy-loaded, zero cost in the initial bundle.
+  Node 24 compatible (browser library, no Node engine constraint). 230 transitive packages.
+
+### Verification PASS ✓
+- `typecheck` ✓ (tsc --noEmit)
+- `test` 32/32 ✓ (28 new; 4 pre-existing mock tests)
+- `lint` ✓
+
+### Blockers
+- None
+
+---
+
 ## Parallel Tracks (after P0 commit)
 
 | Track | Branch | Status |
 |-------|--------|--------|
 | P1 Inference Spike | track/inference | **COMPLETE** ✓ |
-| P3 Compose/Canvas | track/compose | Not started |
+| P3 Compose/Canvas | track/compose | **COMPLETE** ✓ |
 | P4 UI + Design | track/ui | Not started |
 | P5 Batch + ZIP | track/batch | Not started |
