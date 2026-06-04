@@ -11,8 +11,8 @@ export default defineConfig({
     target: 'es2022',
   },
   define: {
-    // Replaced at build time; default to mock unless USE_REAL_MODEL=true
-    __USE_REAL_MODEL__: JSON.stringify(process.env['USE_REAL_MODEL'] === 'true'),
+    // Replaced at build time; default to real model unless USE_REAL_MODEL=false
+    __USE_REAL_MODEL__: JSON.stringify(process.env['USE_REAL_MODEL'] !== 'false'),
     // Skip WebGPU detection — used in headless Playwright tests where navigator.gpu
     // exists (SwiftShader) but ONNX WebGPU ops are unreliable.
     __FORCE_WASM__: JSON.stringify(process.env['FORCE_WASM'] === 'true'),

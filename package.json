@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:inference": "playwright test --config playwright.inference.config.ts",
+    "test:e2e:integration": "playwright test --config playwright.integration.config.ts",
     "lint": "eslint src",
     "copy:ort": "node -e \"const fs=require('fs'),p=require('path'),s='node_modules/@huggingface/transformers/dist',d='public/ort';fs.mkdirSync(d,{recursive:true});fs.readdirSync(s).filter(f=>f.startsWith('ort-wasm')).forEach(f=>fs.copyFileSync(p.join(s,f),p.join(d,f)));console.log('ORT WASM copied to public/ort/');\""
   },

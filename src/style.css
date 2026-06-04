@@ -804,3 +804,33 @@ input[type='color']:focus-visible { outline: 2px solid var(--primary); outline-o
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Mode tabs */
+.mode-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface-2);
+  border-radius: var(--r-sm);
+  padding: 3px;
+}
+.mode-tab {
+  background: transparent;
+  border: none;
+  color: var(--on-surface-dim);
+  cursor: pointer;
+  font: 500 13px/1 var(--font-ui);
+  padding: 5px 12px;
+  border-radius: calc(var(--r-sm) - 2px);
+  transition: background 0.15s, color 0.15s;
+}
+.mode-tab.active {
+  background: var(--surface-3);
+  color: var(--on-surface);
+}
+
+/* Batch panel */
+.batch-panel {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}

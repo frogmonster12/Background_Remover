@@ -6,7 +6,10 @@ import type {
   CompositeOptions,
   BackgroundMode,
 } from './contracts.js';
-import { applyMask } from './compose.js';
+import { applyMask, toPNG } from './compose.js';
+import { decodeToBitmap, UnsupportedFormatError } from './formats.js';
+import { createBatchQueue } from './batch.js';
+import { mountBatchView } from './batch-view.js';
 
 // ── SVG icons (Lucide, stroke-based) ──────────────────────────────────────
 
@@ -34,6 +37,10 @@ function buildHTML(): string {
         <circle cx="13" cy="13" r="2.2" fill="white"/>
       </svg>
       <span class="logo-text">Cutout</span>
+    </div>
+    <div class="mode-tabs" role="tablist" aria-label="Processing mode">
+      <button class="mode-tab active" data-tab="single" role="tab" aria-selected="true" aria-controls="single-panel">Single</button>
+      <button class="mode-tab" data-tab="batch" role="tab" aria-selected="false" aria-controls="batch-panel">Batch</button>
     </div>
     <button id="theme-toggle" class="icon-btn" aria-label="Switch to light theme">
       ${I.sun}
@@ -169,16 +176,8 @@ function buildHTML(): string {
       <div class="divider" aria-hidden="true"></div>
 
       <section class="control-section" aria-labelledby="quality-section-label">
-        <h2 class="section-label" id="quality-section-label">Model quality</h2>
-        <div class="quality-grid" role="group" aria-label="Model quality">
-          <button class="quality-btn active" data-quality="fast" aria-pressed="true">
-            ${I.zap} Fast
-          </button>
-          <button class="quality-btn" data-quality="quality" aria-pressed="false">
-            ${I.sparkles} Quality
-          </button>
-        </div>
-        <p class="quality-note">Quality mode unlocks after integration.</p>
+        <h2 class="section-label" id="quality-section-label">Model</h2>
+        <p class="quality-note">ORMBG (Apache-2.0) — fast, single-pass removal</p>
       </section>
 
       <div class="divider" aria-hidden="true"></div>
@@ -211,6 +210,7 @@ function buildHTML(): string {
 
     </aside>
   </main>
+  <div id="batch-panel" class="batch-panel" hidden></div>
 </div>`;
 }
 
@@ -285,6 +285,7 @@ worker.addEventListener('message', (e: MessageEvent<WorkerResponse>) => {
   if (msg.jobId !== currentJobId) return;
 
   if (msg.type === 'result') {
+    console.log(`[Cutout] inference backend: ${msg.result.backend}`);
     removalResult = msg.result;
     recomposite();
   } else {
@@ -296,8 +297,6 @@ worker.addEventListener('message', (e: MessageEvent<WorkerResponse>) => {
 // ── File processing ────────────────────────────────────────────────────────
 
 async function processFile(file: File): Promise<void> {
-  if (!file.type.startsWith('image/')) return;
-
   sourceFile = file;
   setPhase('processing');
   progressFill.style.width = '0%';
@@ -306,8 +305,8 @@ async function processFile(file: File): Promise<void> {
 
   try {
     const [src, workerBm] = await Promise.all([
-      createImageBitmap(file),
-      createImageBitmap(file),
+      decodeToBitmap(file),
+      decodeToBitmap(file),
     ]);
     sourceBitmap?.close();
     sourceBitmap = src;
@@ -319,9 +318,14 @@ async function processFile(file: File): Promise<void> {
       bitmap: workerBm,
     };
     worker.postMessage(req, [workerBm]);
-  } catch {
-    setPhase('error');
-    setStatus('Failed to read image.');
+  } catch (err) {
+    if (err instanceof UnsupportedFormatError) {
+      setPhase('error');
+      setStatus(`Unsupported format: ${err.message}`);
+    } else {
+      setPhase('error');
+      setStatus('Failed to read image.');
+    }
   }
 }
 
@@ -329,9 +333,8 @@ async function recomposite(): Promise<void> {
   if (!sourceBitmap || !removalResult) return;
   const opts: CompositeOptions = { ...options, backgroundImage: bgImageBitmap ?? undefined };
   try {
-    const composed = await applyMask(sourceBitmap, removalResult, opts);
+    const composed = applyMask(sourceBitmap, removalResult.mask, opts);
     renderToCanvas(composed);
-    composed.close();
     setPhase('done');
     setStatus('Done.');
   } catch (err) {
@@ -341,7 +344,7 @@ async function recomposite(): Promise<void> {
 
 // ── Canvas ─────────────────────────────────────────────────────────────────
 
-function renderToCanvas(bitmap: ImageBitmap): void {
+function renderToCanvas(bitmap: ImageBitmap | OffscreenCanvas): void {
   const { width, height } = bitmap;
   previewCanvas.width  = width;
   previewCanvas.height = height;
@@ -523,17 +526,6 @@ bgFileInput.addEventListener('change', async () => {
   recomposite();
 });
 
-document.querySelectorAll<HTMLButtonElement>('.quality-btn').forEach((btn) =>
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.quality-btn').forEach((b) => {
-      b.classList.remove('active');
-      b.setAttribute('aria-pressed', 'false');
-    });
-    btn.classList.add('active');
-    btn.setAttribute('aria-pressed', 'true');
-  }),
-);
-
 downloadBtn.addEventListener('click',     () => downloadResult('png'));
 downloadJpegBtn.addEventListener('click', () => downloadResult('jpeg'));
 
@@ -550,4 +542,71 @@ themeToggle.addEventListener('click', () => {
   html.setAttribute('data-theme', next);
   localStorage.setItem('cutout-theme', next);
   updateThemeIcon();
+});
+
+// ── Worker dispatch helper ─────────────────────────────────────────────────
+
+function dispatchJob(bitmap: ImageBitmap): Promise<RemovalResult> {
+  const jobId = crypto.randomUUID();
+  return new Promise<RemovalResult>((resolve, reject) => {
+    const handler = (e: MessageEvent<WorkerResponse>) => {
+      const msg = e.data;
+      if (msg.type === 'progress') return;
+      if (msg.type === 'result' || msg.type === 'error') {
+        if (msg.jobId !== jobId) return;
+        worker.removeEventListener('message', handler);
+        if (msg.type === 'result') resolve(msg.result);
+        else reject(new Error(msg.message));
+      }
+    };
+    worker.addEventListener('message', handler);
+    const req: WorkerRequest = { type: 'remove-background', jobId, bitmap };
+    worker.postMessage(req, [bitmap]);
+  });
+}
+
+// ── Batch inference + render functions ────────────────────────────────────
+
+async function batchInferenceFn(file: File): Promise<RemovalResult> {
+  const bitmap = await decodeToBitmap(file);
+  return dispatchJob(bitmap);
+}
+
+async function batchRenderFn(file: File, result: RemovalResult): Promise<Uint8Array> {
+  const bitmap = await decodeToBitmap(file);
+  const composed = applyMask(bitmap, result.mask, { mode: 'transparent' });
+  bitmap.close();
+  const blob = await toPNG(composed);
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+// ── Batch view mount ──────────────────────────────────────────────────────
+
+const batchContainer = document.getElementById('batch-panel')!;
+const batchQueue = createBatchQueue(batchInferenceFn);
+mountBatchView(batchContainer, batchQueue, batchRenderFn);
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+
+document.querySelectorAll<HTMLButtonElement>('.mode-tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    const tabName = tab.dataset['tab'];
+    const singlePanel = document.querySelector<HTMLElement>('.main-layout')!;
+    const batchPanel = document.getElementById('batch-panel')!;
+
+    document.querySelectorAll('.mode-tab').forEach((t) => {
+      t.classList.remove('active');
+      t.setAttribute('aria-selected', 'false');
+    });
+    tab.classList.add('active');
+    tab.setAttribute('aria-selected', 'true');
+
+    if (tabName === 'batch') {
+      singlePanel.hidden = true;
+      batchPanel.hidden = false;
+    } else {
+      singlePanel.hidden = false;
+      batchPanel.hidden = true;
+    }
+  });
 });
