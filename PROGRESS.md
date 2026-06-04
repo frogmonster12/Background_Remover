@@ -95,4 +95,31 @@ proved the inference spike end-to-end. See MODELS.md for full details.
 | P1 Inference Spike | track/inference | **COMPLETE** ✓ |
 | P3 Compose/Canvas | track/compose | **COMPLETE** ✓ |
 | P4 UI + Design | track/ui | Not started |
-| P5 Batch + ZIP | track/batch | Not started |
+| P5 Batch + ZIP | track/batch | **COMPLETE** ✓ |
+
+---
+
+## Phase 5 — Batch + ZIP
+
+**Status:** COMPLETE ✓ (branch: `track/batch`)
+
+### Done
+- `fflate` v0.8.3 (MIT, ~8 kB) added as runtime dependency
+- `src/batch.ts`: `createBatchQueue(inferenceFn)` — sequential queue (`CONCURRENCY = 1`), per-item error isolation, subscriber pattern; `exportZip(items, renderFn)` — fflate ZIP with `name_N` filename dedup
+- `src/batch.test.ts`: 8 unit tests (Vitest/happy-dom) — 5-item happy path, 4-done+1-error isolation, empty ZIP, dedup filenames
+- `src/batch-view.ts`: framework-agnostic DOM component — file drop/browse input, aria-live progress bar, per-item thumbnail + Lucide status icons, "Download all (ZIP)" button
+- `src/batch-view.css`: design-token–based styles, light + dark, spinner animation
+- `src/main.ts`: updated to mount batch view with mock inference + canvas render fn
+- `tests/e2e/batch.spec.ts`: Playwright E2E — 3 files → progress → 3 done → ZIP download
+
+### Verification PASS ✓
+- `test` 11/11 ✓ (8 batch + 3 pre-existing mock tests)
+- `test:e2e` batch: 1/1 ✓, smoke: 1/1 ✓
+- `typecheck` ✓, `lint` ✓
+
+### Notes
+- `createImageBitmap` is unavailable under Playwright's COEP-isolated context for the minimal fixture files; mock inference falls back to `mockRemoveBackground(64, 64)` — real wiring uses the worker message protocol
+- E2E test uses 3 copies of `sample.png` (2×2, definitely valid) to avoid JPEG/WebP decode failures in headless Chromium
+
+### Blockers
+- None
