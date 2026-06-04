@@ -168,12 +168,13 @@ test.describe('batch flow', () => {
     await page.locator('[data-tab="batch"]').click();
     await page.locator('.batch-panel').waitFor({ state: 'visible' });
 
+    // Use real-photo copies (synthetic PNGs rejected by headless Chromium's createImageBitmap)
     const files = [
-      path.join(FIXTURES, 'sample.jpg'),
-      path.join(FIXTURES, 'sample.png'),
+      path.join(FIXTURES, 'fixture-a.jpg'),
+      path.join(FIXTURES, 'fixture-b.jpg'),
+      path.join(FIXTURES, 'fixture-c.jpg'),
       path.join(FIXTURES, 'sample.webp'),
       path.join(FIXTURES, 'sample.jpg'),
-      path.join(FIXTURES, 'sample.png'),
     ];
 
     const batchInput = page.locator('.batch-dropzone input[type="file"]');
