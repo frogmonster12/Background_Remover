@@ -88,6 +88,41 @@ proved the inference spike end-to-end. See MODELS.md for full details.
 
 ---
 
+## Phase 6 — Integration
+
+**Status:** COMPLETE ✓
+
+### Done
+- Merged all four tracks: compose → batch → ui (resolved compose.ts conflict: kept real impl)
+- Self-hosted fonts: Syne, Figtree, JetBrains Mono served from `public/fonts/` — no CDN
+- Real model wired as default (`USE_REAL_MODEL !== 'false'`); mock still available via env
+- `applyMask` call fixed in `main.ts`: pass `removalResult.mask` (AlphaMask), sync return (OffscreenCanvas)
+- `decodeToBitmap` from `formats.ts` used throughout (HEIC support, typed errors)
+- Batch queue wired to real worker via `dispatchJob` helper; `mountBatchView` mounted in `#batch-panel`
+- Single/Batch mode tabs in header
+- Model quality toggle replaced with static ORMBG note (only one model shipped)
+- `tests/e2e/network.spec.ts`: Playwright assertion — no third-party requests on load
+- `tests/e2e/integration.spec.ts`: real-model E2E (formats/modes/feather/batch) — separate config
+- Default `test:e2e` runs with `USE_REAL_MODEL=false` (fast mock); integration config uses real model
+
+### Verification PASS ✓
+- `typecheck`: 0 errors ✓
+- `test`: 39/39 ✓
+- `test:e2e` (smoke + network + UI + batch, mock inference): **17/17 ✓**
+- `lint`: 0 errors ✓
+
+### Notes
+- `tests/e2e/integration.spec.ts` (real model) requires `npm run copy:ort` and model download (~44 MB on first run)
+- Headless Chromium rejects synthetic minimal PNGs via `createImageBitmap`; batch E2E uses real JPEG copies (`fixture-a/b/c.jpg`)
+- `tests/output/` gitignored; feather before/after saved there during integration E2E run
+
+### Remaining
+- Polish: responsive mobile layout, light mode refinement
+- GitHub Pages deployment config
+- README completion with usage instructions and model download note
+
+---
+
 ## Parallel Tracks (after P0 commit)
 
 | Track | Branch | Status |
