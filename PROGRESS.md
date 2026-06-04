@@ -59,5 +59,57 @@ proved the inference spike end-to-end. See MODELS.md for full details.
 |-------|--------|--------|
 | P1 Inference Spike | track/inference | **COMPLETE** ✓ |
 | P3 Compose/Canvas | track/compose | Not started |
-| P4 UI + Design | track/ui | Not started |
+| P4 UI + Design | track/ui | **COMPLETE** ✓ |
 | P5 Batch + ZIP | track/batch | Not started |
+
+---
+
+## Phase 4 — UI + Design System
+
+**Status:** COMPLETE ✓ (branch: `track/ui`)
+
+### Done
+- `src/compose.ts` — stub `decodeToBitmap` + `applyMask` (track/compose will replace)
+- `src/main.ts` — full workspace app: dropzone, worker integration, compositing, download
+- `src/style.css` — full design system: dark/light tokens, checkerboard canvas, all components
+- `index.html` — Google Fonts (Syne + Figtree + JetBrains Mono), updated title
+- `tests/e2e/ui.spec.ts` — 14 Playwright E2E tests
+
+### Design direction: "Surgical Clarity"
+- Dark-first (violet-indigo `#7c6af7` primary); light mode via `data-theme` + `prefers-color-scheme`
+- `Syne` (brand) + `Figtree` (UI) + `JetBrains Mono` (values) — no generic system fonts
+- Checkerboard canvas background so transparent cutouts are obvious
+- Dropzone reticle corners animate in on hover/focus
+- 150ms micro-interactions on all interactive states; `prefers-reduced-motion` respected
+- Controls panel: 2-column mode grid, inline sub-options (color picker / blur slider / image upload)
+- Progress: top-edge sweep bar + centered spinner card during model load / inference
+- Download: PNG always; JPEG exposed only when background mode is opaque
+
+### Verification PASS ✓
+- `typecheck` ✓ (strict, no errors)
+- `lint` ✓
+- `test` 4/4 ✓ (unit tests unchanged)
+- `test:e2e` (ui.spec.ts) **14/14 ✓**
+  - drop image → preview renders
+  - all 4 background modes (transparent / color / blur / image)
+  - download PNG + JPEG
+  - a11y: landmarks, aria-pressed, aria-live, tabindex, labels
+
+### Accessibility pass
+- Landmarks: `role="banner"`, `role="main"`, `<aside aria-label>` ✓
+- All controls labelled (`for`, `aria-label`, or `aria-labelledby`) ✓
+- Dropzone: `role="button"`, `tabindex="0"`, keyboard-operable ✓
+- `aria-live="polite"` status region updates on processing/done/error ✓
+- Mode buttons: `aria-pressed` toggled correctly ✓
+- Range sliders: `aria-valuemin/max/now` kept in sync ✓
+- ≥44px touch targets on all interactive elements ✓
+- `[hidden]` respected over CSS `display` rules ✓
+- `prefers-reduced-motion` disables animations ✓
+
+### Notes
+- `sample.png` fixture is a placeholder (70 bytes, invalid image). E2E tests use `hair-sample.jpg`.
+- compose.ts stub feather: scales slider 0–20 → ~0–255px range; canonical implementation in track/compose.
+- Quality toggle is wired UI-only (placeholder) — real model switching happens at integration (Phase 6).
+
+### Blockers
+- None
