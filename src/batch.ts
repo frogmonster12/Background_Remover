@@ -115,7 +115,9 @@ export function createBatchQueue(inferenceFn: InferenceFn): BatchQueue {
 
 function stemOf(filename: string): string {
   const dot = filename.lastIndexOf('.');
-  return dot > 0 ? filename.slice(0, dot) : filename;
+  const raw = dot > 0 ? filename.slice(0, dot) : filename;
+  // Strip path separators, null bytes, leading dots to prevent ZIP path traversal
+  return raw.replace(/[/\\]/g, '_').replace(/\0/g, '').replace(/^\.+/, '_') || 'image';
 }
 
 export async function exportZip(

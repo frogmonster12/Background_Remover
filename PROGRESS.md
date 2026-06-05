@@ -1,5 +1,55 @@
 # Progress
 
+## Phase 7 — Polish, PWA, Security, Ship
+
+**Status:** COMPLETE ✓ (tagged v2.0.0)
+
+### Done
+- **Security fixes:**
+  - Fixed XSS risk: `batch-view.ts` `statusEl.innerHTML` split to use `textContent` for user-controlled error labels
+  - Sanitized ZIP entry names (`batch.ts:stemOf`) and download filenames (`main.ts`) — strip path separators, null bytes, leading dots
+  - `npm audit`: 0 vulnerabilities
+  - CSP meta tag added to `index.html`: `script-src 'self' 'wasm-unsafe-eval'` (ORT WASM exception documented); `style-src 'unsafe-inline'` required for Vite dev + dynamic `element.style` mutations
+- **UI polish:**
+  - Error state banner with message text (`#error-banner`, visible on `data-phase='error'`)
+  - Offline indicator bar (slides up from bottom via `online`/`offline` events)
+- **PWA / offline:**
+  - `public/sw.js` — cache-first + background-update; injects COEP/COOP headers on navigation responses (enables SharedArrayBuffer on GitHub Pages)
+  - `public/manifest.webmanifest` — name, icons, theme color, standalone display
+  - `index.html` — manifest link, `theme-color`, apple-mobile meta, OG tags
+  - SW registration in `main.ts` (fires on `load`, silent on failure)
+  - `scripts/download-model.mjs` — downloads ORMBG weights to `public/models/` for self-hosting
+  - `inference.ts` — `allowLocalModels: true` (tries self-hosted `/models/` first, falls back to HF CDN)
+  - `npm run download:model` script added
+  - `MODELS.md` updated with download instructions
+- **Deploy:**
+  - `.github/workflows/deploy.yml` — GitHub Actions → GitHub Pages (installs, copy-ort, download-model, typecheck, test, build, deploy)
+- **README:** Full `README.md` with privacy pitch, formats, model table, license table, local-dev steps, GH Pages deploy steps
+- **package.json:** version bumped to `2.0.0`
+
+### Verification PASS ✓
+- `typecheck`: 0 errors ✓
+- `test` (Vitest): 39/39 ✓
+- `test:e2e` (Playwright mock): **17/17 ✓**
+- `lint`: 0 errors ✓
+- `npm run build`: succeeds, `dist/` contains `sw.js` + `manifest.webmanifest` ✓
+- `npm audit`: 0 vulnerabilities ✓
+
+### Security findings (all resolved)
+| Finding | Severity | Fix |
+|---------|----------|-----|
+| `batch-view.ts` innerHTML with user-controlled error message | Medium | `textContent` for label span; SVG only via innerHTML |
+| ZIP entry names allow path traversal chars | Low | `stemOf()` sanitizes separators, null bytes, leading dots |
+| Download `a.download` filename unsanitized | Low | Same sanitize function applied |
+| No CSP | Medium | CSP meta tag added; `script-src 'self' 'wasm-unsafe-eval'` |
+
+### Notes
+- Offline test requires `npm run download:model` to have been run once; after that, SW caches everything on first online visit
+- Chunk size warnings (ORT WASM ~21 MB, heic2any ~1.3 MB) are pre-existing and expected
+- Live URL pending after GitHub Pages is configured in the repo settings
+
+---
+
 ## Phase 0 — Bootstrap
 
 **Status:** COMPLETE ✓

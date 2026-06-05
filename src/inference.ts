@@ -10,8 +10,11 @@ import type { InferenceBackend, RemovalResult } from './contracts.js';
 export const MODEL_ID = 'onnx-community/ormbg-ONNX' as const;
 export const MODEL_LICENSE = 'Apache-2.0' as const;
 
-// Disable local-model loading; rely on HF hub + browser Cache API.
-env.allowLocalModels = false;
+// Prefer self-hosted weights from public/models/ (populated by `npm run download:model`).
+// Falls back to HuggingFace CDN when local files are absent — both paths work;
+// self-hosting is required for full offline support after one online visit.
+env.allowLocalModels = true;
+env.allowRemoteModels = true;
 
 // Serve ORT WASM runtime from same origin (public/ort/) to avoid cross-origin restrictions
 // in Workers. The files are copied there by `npm run copy:ort`.

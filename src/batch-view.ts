@@ -178,6 +178,14 @@ export function mountBatchView(
   // Render helpers
   // ---------------------------------------------------------------------------
 
+  function setStatusContent(el: HTMLElement, item: BatchItem) {
+    // SVG icon is hardcoded (safe); label text must use textContent to prevent XSS
+    el.innerHTML = statusIcon(item.status);
+    const label = document.createElement('span');
+    label.textContent = statusLabel(item);
+    el.appendChild(label);
+  }
+
   function updateProgress(progress: BatchProgress) {
     const pct = Math.round(progress.fraction * 100);
     progressFill.style.width = `${pct}%`;
@@ -207,7 +215,7 @@ export function mountBatchView(
         const name = el('span', { class: 'batch-item-name' });
         name.textContent = item.file.name;
         const statusEl = el('span', { class: 'batch-item-status' });
-        statusEl.innerHTML = `${statusIcon(item.status)}<span>${statusLabel(item)}</span>`;
+        setStatusContent(statusEl, item);
         li.appendChild(img);
         li.appendChild(name);
         li.appendChild(statusEl);
@@ -217,9 +225,7 @@ export function mountBatchView(
         li.dataset['status'] = item.status;
         li.setAttribute('data-status', item.status);
         const statusEl = li.querySelector('.batch-item-status');
-        if (statusEl) {
-          statusEl.innerHTML = `${statusIcon(item.status)}<span>${statusLabel(item)}</span>`;
-        }
+        if (statusEl) setStatusContent(statusEl as HTMLElement, item);
       }
     }
   }

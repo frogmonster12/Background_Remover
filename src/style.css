@@ -805,6 +805,67 @@ input[type='color']:focus-visible { outline: 2px solid var(--primary); outline-o
   }
 }
 
+/* ═══════════════════════════════════════════════════════════
+   Error banner
+══════════════════════════════════════════════════════════════ */
+
+.error-banner {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  height: 44px;
+  background: rgba(240, 80, 100, 0.12);
+  border: 1px solid rgba(240, 80, 100, 0.35);
+  border-radius: var(--r);
+  color: var(--danger);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  max-width: calc(100% - 80px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  animation: fadeUp 0.2s ease-out;
+}
+
+.workspace[data-phase='idle']       .error-banner { display: none; }
+.workspace[data-phase='processing'] .error-banner { display: none; }
+.workspace[data-phase='done']       .error-banner { display: none; }
+.workspace[data-phase='error']      .error-banner { display: flex; }
+
+/* ═══════════════════════════════════════════════════════════
+   Offline indicator
+══════════════════════════════════════════════════════════════ */
+
+.offline-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  background: var(--surface-3);
+  border-top: 1px solid var(--border-mid);
+  color: var(--on-surface-dim);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  z-index: 100;
+  transform: translateY(100%);
+  transition: transform var(--t-md);
+}
+
+.offline-bar.visible {
+  transform: translateY(0);
+}
+
 /* Mode tabs */
 .mode-tabs {
   display: flex;

@@ -16,6 +16,26 @@ Only MIT or Apache-2.0 models. Do NOT use BRIA RMBG-1.4 / RMBG-2.0 (non-commerci
 | Per-image time | ~4.2s on 512×341 WASM |
 | Hair-edge artifacts | Visual check pending (`tests/output/hair-mask.png` — see eyeball step) |
 
+### Self-hosting for offline support
+
+The model weights are **not committed to git** (`public/models/` is gitignored).
+To enable offline-capable builds, download them once before building:
+
+```bash
+npm run download:model
+# Downloads ~44 MB to public/models/onnx-community/ormbg-ONNX/
+```
+
+Files written:
+- `public/models/onnx-community/ormbg-ONNX/config.json`
+- `public/models/onnx-community/ormbg-ONNX/preprocessor_config.json`
+- `public/models/onnx-community/ormbg-ONNX/onnx/model_quantized.onnx`
+
+**Without this step:** inference.ts falls back to the HuggingFace CDN automatically.
+Offline use then requires the browser's own HTTP cache to have warmed up.
+**With this step:** model is served from same origin; the service worker caches it
+after first visit, enabling full offline use on repeat visits.
+
 ### License verification
 
 `onnx-community/ormbg-ONNX` is built on `schirrmacher/ormbg` which is Apache-2.0.

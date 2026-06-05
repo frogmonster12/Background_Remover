@@ -1,6 +1,6 @@
 {
   "name": "bg-remover-web",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "description": "Browser-only AI background remover — all inference runs client-side",
   "license": "MIT",
   "private": false,
@@ -16,7 +16,8 @@
     "test:e2e:inference": "playwright test --config playwright.inference.config.ts",
     "test:e2e:integration": "playwright test --config playwright.integration.config.ts",
     "lint": "eslint src",
-    "copy:ort": "node -e \"const fs=require('fs'),p=require('path'),s='node_modules/@huggingface/transformers/dist',d='public/ort';fs.mkdirSync(d,{recursive:true});fs.readdirSync(s).filter(f=>f.startsWith('ort-wasm')).forEach(f=>fs.copyFileSync(p.join(s,f),p.join(d,f)));console.log('ORT WASM copied to public/ort/');\""
+    "copy:ort": "node -e \"const fs=require('fs'),p=require('path'),s='node_modules/@huggingface/transformers/dist',d='public/ort';fs.mkdirSync(d,{recursive:true});fs.readdirSync(s).filter(f=>f.startsWith('ort-wasm')).forEach(f=>fs.copyFileSync(p.join(s,f),p.join(d,f)));console.log('ORT WASM copied to public/ort/');\"",
+    "download:model": "node scripts/download-model.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.1",

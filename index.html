@@ -4,7 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cutout — Background Remover</title>
+    <meta name="description" content="AI background removal that runs entirely in your browser — nothing leaves your device. Free, offline-capable, no login." />
+    <meta name="theme-color" content="#7c6af7" />
+    <!-- CSP: script-src is locked to 'self' + 'wasm-unsafe-eval' (required for ORT WebAssembly).
+         style-src includes 'unsafe-inline' because Vite dev injects <style> elements and our
+         code sets element.style.xxx dynamically; this is acceptable because no user-controlled
+         HTML is ever rendered via innerHTML (audit: batch-view.ts uses textContent for labels). -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' blob: https://huggingface.co https://cdn-lfs.huggingface.co https://cdn-lfs-us-1.huggingface.co; worker-src 'self' blob:; object-src 'none';" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta property="og:title" content="Cutout — Background Remover" />
+    <meta property="og:description" content="AI background removal in your browser. Private, offline-capable, free." />
+    <meta property="og:type" content="website" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   </head>
   <body>
     <div id="app"></div>

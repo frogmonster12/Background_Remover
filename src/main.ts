@@ -21,6 +21,8 @@ const I = {
   image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>`,
   zap: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>`,
   sparkles: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>`,
+  alert: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  wifi_off: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>`,
 } as const;
 
 // ── Build HTML ─────────────────────────────────────────────────────────────
@@ -109,6 +111,11 @@ function buildHTML(): string {
         aria-atomic="true"
         data-testid="status-region"
       ></div>
+
+      <div class="error-banner" id="error-banner" role="alert" aria-atomic="true">
+        ${I.alert}
+        <span id="error-banner-text"></span>
+      </div>
 
       <input
         type="file"
@@ -211,6 +218,10 @@ function buildHTML(): string {
     </aside>
   </main>
   <div id="batch-panel" class="batch-panel" hidden></div>
+  <div class="offline-bar" id="offline-bar" role="status" aria-live="polite">
+    ${I.wifi_off}
+    You're offline — previously processed images and cached results still work
+  </div>
 </div>`;
 }
 
@@ -251,6 +262,8 @@ const bgBlurRow       = document.getElementById('bg-blur-row')!;
 const bgImageRow      = document.getElementById('bg-image-row')!;
 const uploadBgBtn     = document.getElementById('upload-bg-btn')!;
 const bgImgPreview    = document.getElementById('bg-image-preview')!;
+const errorBannerText = document.getElementById('error-banner-text')!;
+const offlineBar      = document.getElementById('offline-bar')!;
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -290,7 +303,7 @@ worker.addEventListener('message', (e: MessageEvent<WorkerResponse>) => {
     recomposite();
   } else {
     setPhase('error');
-    setStatus(`Error: ${msg.message}`);
+    setStatus(`Error: ${msg.message}`, true);
   }
 });
 
@@ -321,10 +334,10 @@ async function processFile(file: File): Promise<void> {
   } catch (err) {
     if (err instanceof UnsupportedFormatError) {
       setPhase('error');
-      setStatus(`Unsupported format: ${err.message}`);
+      setStatus(`Unsupported format: ${err.message}`, true);
     } else {
       setPhase('error');
-      setStatus('Failed to read image.');
+      setStatus('Failed to read image.', true);
     }
   }
 }
@@ -390,7 +403,8 @@ function downloadResult(format: 'png' | 'jpeg'): void {
 
   const mime     = format === 'png' ? 'image/png' : 'image/jpeg';
   const quality  = format === 'jpeg' ? 0.92 : undefined;
-  const baseName = (sourceFile?.name ?? 'image').replace(/\.[^.]+$/, '');
+  const rawBase = (sourceFile?.name ?? 'image').replace(/\.[^.]+$/, '');
+  const baseName = rawBase.replace(/[/\\]/g, '_').replace(/\0/g, '').replace(/^\.+/, '_') || 'image';
   const filename = `${baseName}-cutout.${format === 'png' ? 'png' : 'jpg'}`;
 
   tmp.toBlob(
@@ -443,8 +457,9 @@ function setPhase(p: Phase): void {
   }
 }
 
-function setStatus(text: string): void {
+function setStatus(text: string, isError = false): void {
   statusRegion.textContent = text;
+  if (isError) errorBannerText.textContent = text;
 }
 
 // ── Theme ──────────────────────────────────────────────────────────────────
@@ -610,3 +625,23 @@ document.querySelectorAll<HTMLButtonElement>('.mode-tab').forEach((tab) => {
     }
   });
 });
+
+// ── Offline indicator ─────────────────────────────────────────────────────
+
+function syncOffline() {
+  offlineBar.classList.toggle('visible', !navigator.onLine);
+}
+
+syncOffline();
+window.addEventListener('online',  syncOffline);
+window.addEventListener('offline', syncOffline);
+
+// ── Service worker registration ───────────────────────────────────────────
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // SW registration fails silently — app still works online
+    });
+  });
+}
