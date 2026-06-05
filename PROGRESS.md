@@ -1,5 +1,53 @@
 # Progress
 
+## Phase 9 — Manual Touch-up Brush
+
+**Status:** COMPLETE ✓
+
+### Done
+- **`src/brush.ts`** — pure, DOM-free brush core:
+  - `stampMask(mask, w, h, cx, cy, radius, mode, strength)` — cosine-falloff circular stamp, mutates mask in place; restore pushes alpha → 255, erase → 0
+  - `stampLine(...)` — interpolates stamps every ~radius/4 px for gap-free strokes
+- **`src/brush.test.ts`** — 14 Vitest unit tests: restore/erase at center/edge/outside, out-of-bounds safety, `stampLine` gap fill
+- **`src/main.ts`** — brush integration:
+  - `workingMask` / `originalMask` cloned from `RemovalResult.mask` on each inference result
+  - `recomposite()` uses `workingMask` so all modes (transparent/color/blur/image) and feather flow through edited mask
+  - `paintStrokePreview()` lightweight canvas update (no button/overlay resize) for live rAF preview
+  - Pointer Events API (mouse + touch + pen) on `#brush-overlay` canvas with `setPointerCapture`
+  - rAF-throttled `paintFrame()` calls `stampLine` between `lastPaintPos` and `pendingPos`, then redraws
+  - Full-quality `recomposite()` on `pointerup`
+  - 20-entry undo stack (stroke-level snapshots saved on `pointerdown`); redo stack cleared on new stroke
+  - Reset mask copies `originalMask` back into `workingMask` (also undo-able)
+  - Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z keyboard shortcuts
+  - Circular cursor drawn on overlay at current pointer position (violet for restore, red for erase); inner ring shows 50% falloff boundary; cursor hidden on `pointerleave`
+- **`src/style.css`** — brush controls styling:
+  - `.preview-wrap` wrapper (inline-flex, position:relative) containing canvas + overlay
+  - `.brush-overlay` (position:absolute; inset:0; cursor:none; pointer-events:all in done phase)
+  - `.brush-section` / `.brush-mode-btn` / `.brush-actions` / `.brush-reset-btn` — consistent with existing sidebar tokens, light+dark, 44px targets
+  - Brush section + trailing divider hidden via CSS in non-done phases
+- **`tests/e2e/brush.spec.ts`** — 26 Playwright tests:
+  - Visibility (idle vs done), mode toggle, size slider, undo/redo/reset, Ctrl+Z/Y
+  - Pixel-level: erase lowers alpha at canvas center; restore raises alpha at corners
+  - Export: downloaded PNG reflects erase edit; brush edits survive bg-mode change
+  - A11y: aria-label, aria-pressed, aria-valuemin/max/now on all controls
+  - Before/after screenshots saved to `tests/output/brush-before.png` / `brush-after.png`
+
+### Architecture note — performance
+`applyMask` iterates all pixels on every rAF frame. For images ≤ 2K this is imperceptible
+(< 5 ms). For images > ~4K (~8 M pixels) expect > 16 ms/frame lag during live strokes.
+A dirty-bbox optimisation (composite only the stamped bounding box) would eliminate this
+but was deferred as out of scope for this phase.
+
+### Verification PASS ✓
+- `typecheck`: 0 errors ✓
+- `lint`: 0 errors ✓
+- `test` (Vitest): 53/53 ✓ (14 new brush tests)
+- `test:e2e` (Playwright): 43/43 ✓ (26 new brush tests)
+- `build`: succeeds, no new warnings ✓
+- Before/after screenshots saved to `tests/output/brush-before.png` and `brush-after.png`
+
+---
+
 ## Phase 7 — Polish, PWA, Security, Ship
 
 **Status:** COMPLETE ✓ (tagged v2.0.0)

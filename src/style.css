@@ -359,16 +359,31 @@ button { font-family: inherit; cursor: pointer; }
 .browse-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 /* ═══════════════════════════════════════════════════════════
-   Preview canvas
+   Preview wrap + canvas + brush overlay
 ══════════════════════════════════════════════════════════════ */
 
+.preview-wrap {
+  position: relative;
+  display: inline-flex;
+  border-radius: var(--r);
+  animation: fadeUp 0.25s ease-out forwards;
+}
+
 .preview-canvas {
-  max-width: calc(100% - 64px);
-  max-height: calc(100% - 64px);
-  object-fit: contain;
+  display: block;
+  max-width: calc(100vw - var(--sidebar) - 64px);
+  max-height: calc(100vh - var(--header) - 64px);
   border-radius: var(--r);
   box-shadow: 0 8px 48px rgba(0, 0, 0, 0.45);
-  animation: fadeUp 0.25s ease-out forwards;
+}
+
+.brush-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r);
+  touch-action: none;
+  /* cursor set dynamically; default none hides the system cursor */
+  cursor: none;
 }
 
 @keyframes fadeUp {
@@ -476,28 +491,33 @@ button { font-family: inherit; cursor: pointer; }
 ══════════════════════════════════════════════════════════════ */
 
 .workspace[data-phase='idle'] .dropzone           { display: flex; }
-.workspace[data-phase='idle'] .preview-canvas     { display: none; }
+.workspace[data-phase='idle'] .preview-wrap       { display: none; }
 .workspace[data-phase='idle'] .progress-overlay   { display: none; }
 .workspace[data-phase='idle'] .processing-overlay { display: none; }
 .workspace[data-phase='idle'] .new-image-btn      { display: none; }
 
 .workspace[data-phase='processing'] .dropzone           { display: none; }
-.workspace[data-phase='processing'] .preview-canvas     { display: none; }
+.workspace[data-phase='processing'] .preview-wrap       { display: none; }
 .workspace[data-phase='processing'] .progress-overlay   { display: block; }
 .workspace[data-phase='processing'] .processing-overlay { display: flex; }
 .workspace[data-phase='processing'] .new-image-btn      { display: none; }
 
 .workspace[data-phase='done'] .dropzone           { display: none; }
-.workspace[data-phase='done'] .preview-canvas     { display: block; }
+.workspace[data-phase='done'] .preview-wrap       { display: inline-flex; }
+.workspace[data-phase='done'] .brush-overlay      { pointer-events: all; }
 .workspace[data-phase='done'] .progress-overlay   { display: none; }
 .workspace[data-phase='done'] .processing-overlay { display: none; }
 .workspace[data-phase='done'] .new-image-btn      { display: flex; }
 
 .workspace[data-phase='error'] .dropzone           { display: flex; }
-.workspace[data-phase='error'] .preview-canvas     { display: none; }
+.workspace[data-phase='error'] .preview-wrap       { display: none; }
 .workspace[data-phase='error'] .progress-overlay   { display: none; }
 .workspace[data-phase='error'] .processing-overlay { display: none; }
 .workspace[data-phase='error'] .new-image-btn      { display: none; }
+
+/* Brush section + trailing divider only visible after processing */
+.workspace:not([data-phase='done']) .brush-section,
+.workspace:not([data-phase='done']) .brush-divider { display: none !important; }
 
 /* ═══════════════════════════════════════════════════════════
    Controls panel
@@ -894,4 +914,86 @@ input[type='color']:focus-visible { outline: 2px solid var(--primary); outline-o
   flex: 1;
   padding: 24px;
   overflow-y: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Brush controls
+══════════════════════════════════════════════════════════════ */
+
+.brush-mode-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.brush-mode-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 44px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--on-surface-dim);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  touch-action: manipulation;
+  transition: background var(--t), border-color var(--t), color var(--t);
+}
+
+.brush-mode-btn:hover {
+  background: var(--surface-3);
+  color: var(--on-surface);
+}
+
+.brush-mode-btn.active,
+.brush-mode-btn[aria-pressed='true'] {
+  background: var(--primary-tint);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.brush-mode-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.brush-size-header {
+  margin-top: 12px;
+}
+
+.brush-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.brush-reset-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 44px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--r-sm);
+  color: var(--on-surface-dim);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  touch-action: manipulation;
+  transition: background var(--t), color var(--t), border-color var(--t);
+}
+
+.brush-reset-btn:hover {
+  background: var(--surface-3);
+  color: var(--on-surface);
+  border-color: var(--on-surface-dim);
+}
+
+.brush-reset-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }

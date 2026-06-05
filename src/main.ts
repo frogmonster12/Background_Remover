@@ -10,6 +10,8 @@ import { applyMask, toPNG } from './compose.js';
 import { decodeToBitmap, UnsupportedFormatError } from './formats.js';
 import { createBatchQueue } from './batch.js';
 import { mountBatchView } from './batch-view.js';
+import { stampLine } from './brush.js';
+import type { BrushMode } from './brush.js';
 
 // ── SVG icons (Lucide, stroke-based) ──────────────────────────────────────
 
@@ -23,6 +25,10 @@ const I = {
   sparkles: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>`,
   alert: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
   wifi_off: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>`,
+  rotateCcw: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`,
+  rotateCw: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>`,
+  eraser: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>`,
+  refreshCw: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>`,
 } as const;
 
 // ── Build HTML ─────────────────────────────────────────────────────────────
@@ -74,12 +80,20 @@ function buildHTML(): string {
         </div>
       </div>
 
-      <canvas
-        id="preview-canvas"
-        class="preview-canvas"
-        data-testid="preview-canvas"
-        aria-label="Processed image preview"
-      ></canvas>
+      <div class="preview-wrap" id="preview-wrap">
+        <canvas
+          id="preview-canvas"
+          class="preview-canvas"
+          data-testid="preview-canvas"
+          aria-label="Processed image preview"
+        ></canvas>
+        <canvas
+          id="brush-overlay"
+          class="brush-overlay"
+          data-testid="brush-overlay"
+          aria-hidden="true"
+        ></canvas>
+      </div>
 
       <div class="progress-overlay" aria-hidden="true">
         <div class="progress-bar">
@@ -189,6 +203,45 @@ function buildHTML(): string {
 
       <div class="divider" aria-hidden="true"></div>
 
+      <section class="control-section brush-section" id="brush-section" aria-labelledby="brush-section-label">
+        <h2 class="section-label" id="brush-section-label">Touch-up</h2>
+        <div class="brush-mode-row" role="group" aria-label="Brush mode">
+          <button class="brush-mode-btn active" id="brush-restore-btn" data-brush="restore"
+            data-testid="brush-restore-btn" aria-pressed="true"
+            aria-label="Restore foreground">
+            ${I.sparkles} Restore
+          </button>
+          <button class="brush-mode-btn" id="brush-erase-btn" data-brush="erase"
+            data-testid="brush-erase-btn" aria-pressed="false"
+            aria-label="Erase background">
+            ${I.eraser} Erase
+          </button>
+        </div>
+        <div class="slider-header brush-size-header">
+          <label for="brush-size" class="sub-label">Size</label>
+          <span class="slider-value" id="brush-size-value">24px</span>
+        </div>
+        <input type="range" id="brush-size" class="slider" min="4" max="120" value="24"
+          aria-label="Brush size in pixels" aria-valuemin="4" aria-valuemax="120" aria-valuenow="24"
+          data-testid="brush-size" />
+        <div class="brush-actions">
+          <button class="icon-btn" id="undo-btn" data-testid="undo-btn"
+            aria-label="Undo last stroke" title="Undo (Ctrl+Z)" disabled>
+            ${I.rotateCcw}
+          </button>
+          <button class="icon-btn" id="redo-btn" data-testid="redo-btn"
+            aria-label="Redo stroke" title="Redo (Ctrl+Y)" disabled>
+            ${I.rotateCw}
+          </button>
+          <button class="brush-reset-btn" id="reset-mask-btn" data-testid="reset-mask-btn"
+            aria-label="Reset to original inference mask">
+            ${I.refreshCw} Reset mask
+          </button>
+        </div>
+      </section>
+
+      <div class="divider brush-divider" aria-hidden="true"></div>
+
       <section class="control-section download-section" aria-label="Download result">
         <button
           id="download-btn"
@@ -245,6 +298,8 @@ const browseBtn       = document.getElementById('browse-btn')!;
 const fileInput       = document.getElementById('file-input') as HTMLInputElement;
 const bgFileInput     = document.getElementById('bg-file-input') as HTMLInputElement;
 const previewCanvas   = document.getElementById('preview-canvas') as HTMLCanvasElement;
+const brushOverlay    = document.getElementById('brush-overlay') as HTMLCanvasElement;
+const canvasArea      = document.querySelector<HTMLElement>('.canvas-area')!;
 const progressFill    = document.getElementById('progress-fill')!;
 const processingText  = document.getElementById('processing-text')!;
 const statusRegion    = document.getElementById('status-region')!;
@@ -264,6 +319,12 @@ const uploadBgBtn     = document.getElementById('upload-bg-btn')!;
 const bgImgPreview    = document.getElementById('bg-image-preview')!;
 const errorBannerText = document.getElementById('error-banner-text')!;
 const offlineBar      = document.getElementById('offline-bar')!;
+// Brush controls
+const undoBtn         = document.getElementById('undo-btn') as HTMLButtonElement;
+const redoBtn         = document.getElementById('redo-btn') as HTMLButtonElement;
+const resetMaskBtn    = document.getElementById('reset-mask-btn') as HTMLButtonElement;
+const brushSizeSlider = document.getElementById('brush-size') as HTMLInputElement;
+const brushSizeValue  = document.getElementById('brush-size-value')!;
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -276,6 +337,21 @@ let bgImageBitmap: ImageBitmap | null = null;
 let bgObjectURL: string | null = null;
 let currentJobId = '';
 let options: CompositeOptions = { mode: 'transparent', feather: 0 };
+
+// Brush state
+let workingMask: Uint8ClampedArray | null = null;
+let originalMask: Uint8ClampedArray | null = null;
+let undoStack: Uint8ClampedArray[] = [];
+let redoStack: Uint8ClampedArray[] = [];
+let brushMode: BrushMode = 'restore';
+let brushRadius = 24;
+
+// Pointer state during a stroke
+let isPainting = false;
+let strokeSnapshot: Uint8ClampedArray | null = null;
+let lastPaintPos: { x: number; y: number } | null = null;
+let pendingPos: { x: number; y: number } | null = null;
+let rafPending = false;
 
 // ── Worker ─────────────────────────────────────────────────────────────────
 
@@ -300,6 +376,11 @@ worker.addEventListener('message', (e: MessageEvent<WorkerResponse>) => {
   if (msg.type === 'result') {
     console.log(`[Cutout] inference backend: ${msg.result.backend}`);
     removalResult = msg.result;
+    workingMask   = new Uint8ClampedArray(msg.result.mask);
+    originalMask  = new Uint8ClampedArray(msg.result.mask);
+    undoStack     = [];
+    redoStack     = [];
+    updateUndoRedoBtns();
     recomposite();
   } else {
     setPhase('error');
@@ -344,9 +425,10 @@ async function processFile(file: File): Promise<void> {
 
 async function recomposite(): Promise<void> {
   if (!sourceBitmap || !removalResult) return;
+  const mask = workingMask ?? removalResult.mask;
   const opts: CompositeOptions = { ...options, backgroundImage: bgImageBitmap ?? undefined };
   try {
-    const composed = applyMask(sourceBitmap, removalResult.mask, opts);
+    const composed = applyMask(sourceBitmap, mask, opts);
     renderToCanvas(composed);
     setPhase('done');
     setStatus('Done.');
@@ -362,19 +444,24 @@ function renderToCanvas(bitmap: ImageBitmap | OffscreenCanvas): void {
   previewCanvas.width  = width;
   previewCanvas.height = height;
 
-  const area = previewCanvas.parentElement!;
   const pad  = 48;
   const scale = Math.min(
-    (area.clientWidth  - pad * 2) / width,
-    (area.clientHeight - pad * 2) / height,
+    (canvasArea.clientWidth  - pad * 2) / width,
+    (canvasArea.clientHeight - pad * 2) / height,
     1,
   );
-  previewCanvas.style.width  = `${Math.round(width  * scale)}px`;
-  previewCanvas.style.height = `${Math.round(height * scale)}px`;
+  const cssW = Math.round(width  * scale);
+  const cssH = Math.round(height * scale);
+  previewCanvas.style.width  = `${cssW}px`;
+  previewCanvas.style.height = `${cssH}px`;
 
   const ctx = previewCanvas.getContext('2d')!;
   ctx.clearRect(0, 0, width, height);
   ctx.drawImage(bitmap, 0, 0);
+
+  // Sync overlay pixel dimensions to match display size (1:1 CSS pixel mapping)
+  brushOverlay.width  = cssW;
+  brushOverlay.height = cssH;
 
   downloadBtn.disabled = false;
   downloadBtn.removeAttribute('aria-disabled');
@@ -385,6 +472,23 @@ function renderToCanvas(bitmap: ImageBitmap | OffscreenCanvas): void {
     downloadJpegBtn.disabled = false;
     downloadJpegBtn.removeAttribute('aria-disabled');
   }
+}
+
+/**
+ * Lightweight canvas update used during live brush strokes —
+ * skips button state and overlay resize (stable during a single stroke).
+ *
+ * Performance note: applyMask iterates every pixel. For images > ~4K on a side
+ * (~8 M pixels) this can exceed 16 ms/frame, causing visible lag. A dirty-bbox
+ * optimisation would be needed for those sizes.
+ */
+function paintStrokePreview(): void {
+  if (!sourceBitmap || !workingMask) return;
+  const opts: CompositeOptions = { ...options, backgroundImage: bgImageBitmap ?? undefined };
+  const composed = applyMask(sourceBitmap, workingMask, opts);
+  const ctx = previewCanvas.getContext('2d')!;
+  ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+  ctx.drawImage(composed, 0, 0);
 }
 
 // ── Download ───────────────────────────────────────────────────────────────
@@ -479,6 +583,136 @@ function updateThemeIcon(): void {
 
 updateThemeIcon();
 
+// ── Brush helpers ──────────────────────────────────────────────────────────
+
+/** Convert a pointer event (CSS coords) to image pixel coordinates. */
+function getImageCoords(e: PointerEvent): { x: number; y: number } {
+  const rect = brushOverlay.getBoundingClientRect();
+  const cssX = e.clientX - rect.left;
+  const cssY = e.clientY - rect.top;
+  // brushOverlay.width === CSS width (1:1 ratio), previewCanvas.width === image width
+  const scaleX = previewCanvas.width  / brushOverlay.width;
+  const scaleY = previewCanvas.height / brushOverlay.height;
+  return { x: cssX * scaleX, y: cssY * scaleY };
+}
+
+/** Draw the circular cursor preview at CSS coordinate (cssX, cssY). */
+function drawCursor(cssX: number, cssY: number): void {
+  const ctx = brushOverlay.getContext('2d')!;
+  ctx.clearRect(0, 0, brushOverlay.width, brushOverlay.height);
+
+  // Brush radius in display (CSS / overlay) pixels
+  const displayRadius = brushRadius * (brushOverlay.width / previewCanvas.width);
+  if (displayRadius < 0.5) return;
+
+  const isRestore = brushMode === 'restore';
+  const color     = isRestore ? 'rgba(124,106,247,0.9)' : 'rgba(240,80,100,0.9)';
+  const colorDim  = isRestore ? 'rgba(124,106,247,0.35)' : 'rgba(240,80,100,0.35)';
+
+  // Inner soft-falloff ring (50% radius)
+  ctx.beginPath();
+  ctx.arc(cssX, cssY, Math.max(1, displayRadius * 0.5), 0, Math.PI * 2);
+  ctx.strokeStyle = colorDim;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Outer boundary ring
+  ctx.beginPath();
+  ctx.arc(cssX, cssY, displayRadius, 0, Math.PI * 2);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(cssX, cssY, 2, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+/** rAF callback: apply the pending stamp(s) and refresh the preview. */
+function paintFrame(): void {
+  rafPending = false;
+  if (!isPainting || !workingMask || !pendingPos || !removalResult) return;
+
+  const pos = pendingPos;
+  if (lastPaintPos) {
+    stampLine(
+      workingMask,
+      removalResult.width,
+      removalResult.height,
+      lastPaintPos.x,
+      lastPaintPos.y,
+      pos.x,
+      pos.y,
+      brushRadius,
+      brushMode,
+    );
+  } else {
+    stampLine(
+      workingMask,
+      removalResult.width,
+      removalResult.height,
+      pos.x,
+      pos.y,
+      pos.x,
+      pos.y,
+      brushRadius,
+      brushMode,
+    );
+  }
+  lastPaintPos = pos;
+  paintStrokePreview();
+
+  // Redraw cursor over the updated preview (image → overlay coordinate mapping)
+  const overlayX = (pos.x / previewCanvas.width)  * brushOverlay.width;
+  const overlayY = (pos.y / previewCanvas.height) * brushOverlay.height;
+  drawCursor(overlayX, overlayY);
+}
+
+// ── Undo / redo ────────────────────────────────────────────────────────────
+
+function updateUndoRedoBtns(): void {
+  undoBtn.disabled = undoStack.length === 0;
+  undoBtn.setAttribute('aria-disabled', String(undoBtn.disabled));
+  redoBtn.disabled = redoStack.length === 0;
+  redoBtn.setAttribute('aria-disabled', String(redoBtn.disabled));
+}
+
+function pushUndo(snapshot: Uint8ClampedArray): void {
+  undoStack.push(snapshot);
+  if (undoStack.length > 20) undoStack.shift();
+  redoStack = [];
+  updateUndoRedoBtns();
+}
+
+function undo(): void {
+  if (!workingMask || undoStack.length === 0) return;
+  redoStack.push(new Uint8ClampedArray(workingMask));
+  workingMask = undoStack.pop()!;
+  recomposite();
+  updateUndoRedoBtns();
+}
+
+function redo(): void {
+  if (!workingMask || redoStack.length === 0) return;
+  undoStack.push(new Uint8ClampedArray(workingMask));
+  if (undoStack.length > 20) undoStack.shift();
+  workingMask = redoStack.pop()!;
+  recomposite();
+  updateUndoRedoBtns();
+}
+
+function resetMask(): void {
+  if (!workingMask || !originalMask) return;
+  undoStack.push(new Uint8ClampedArray(workingMask));
+  if (undoStack.length > 20) undoStack.shift();
+  redoStack = [];
+  workingMask = new Uint8ClampedArray(originalMask);
+  recomposite();
+  updateUndoRedoBtns();
+}
+
 // ── Events ─────────────────────────────────────────────────────────────────
 
 dropzone.addEventListener('dragover',  (e) => { e.preventDefault(); dropzone.classList.add('drag-over'); });
@@ -549,6 +783,11 @@ newImageBtn.addEventListener('click', () => {
   sourceBitmap?.close();
   sourceBitmap  = null;
   removalResult = null;
+  workingMask   = null;
+  originalMask  = null;
+  undoStack     = [];
+  redoStack     = [];
+  updateUndoRedoBtns();
   fileInput.click();
 });
 
@@ -557,6 +796,99 @@ themeToggle.addEventListener('click', () => {
   html.setAttribute('data-theme', next);
   localStorage.setItem('cutout-theme', next);
   updateThemeIcon();
+});
+
+// ── Brush mode toggle ──────────────────────────────────────────────────────
+
+document.querySelectorAll<HTMLButtonElement>('.brush-mode-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    brushMode = btn.dataset['brush'] as BrushMode;
+    document.querySelectorAll<HTMLButtonElement>('.brush-mode-btn').forEach((b) => {
+      const active = b.dataset['brush'] === brushMode;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-pressed', String(active));
+    });
+  });
+});
+
+brushSizeSlider.addEventListener('input', () => {
+  brushRadius = parseInt(brushSizeSlider.value, 10);
+  brushSizeValue.textContent = `${brushRadius}px`;
+  brushSizeSlider.setAttribute('aria-valuenow', String(brushRadius));
+});
+
+undoBtn.addEventListener('click',      () => undo());
+redoBtn.addEventListener('click',      () => redo());
+resetMaskBtn.addEventListener('click', () => resetMask());
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    undo();
+  } else if (
+    (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y' ||
+    (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z'
+  ) {
+    e.preventDefault();
+    redo();
+  }
+});
+
+// ── Brush overlay pointer events ───────────────────────────────────────────
+
+brushOverlay.addEventListener('pointerdown', (e) => {
+  if (!workingMask || !removalResult) return;
+  e.preventDefault();
+  brushOverlay.setPointerCapture(e.pointerId);
+  isPainting    = true;
+  strokeSnapshot = new Uint8ClampedArray(workingMask);
+  const pos     = getImageCoords(e);
+  lastPaintPos  = null;
+  pendingPos    = pos;
+  if (!rafPending) {
+    rafPending = true;
+    requestAnimationFrame(paintFrame);
+  }
+});
+
+brushOverlay.addEventListener('pointermove', (e) => {
+  const rect = brushOverlay.getBoundingClientRect();
+  const cssX = e.clientX - rect.left;
+  const cssY = e.clientY - rect.top;
+  drawCursor(cssX, cssY);
+
+  if (!isPainting) return;
+  e.preventDefault();
+  pendingPos = getImageCoords(e);
+  if (!rafPending) {
+    rafPending = true;
+    requestAnimationFrame(paintFrame);
+  }
+});
+
+brushOverlay.addEventListener('pointerup', () => {
+  if (!isPainting) return;
+  isPainting = false;
+  if (strokeSnapshot) {
+    pushUndo(strokeSnapshot);
+    strokeSnapshot = null;
+  }
+  lastPaintPos = null;
+  pendingPos   = null;
+  recomposite(); // full-quality composite after stroke ends
+});
+
+brushOverlay.addEventListener('pointercancel', () => {
+  isPainting     = false;
+  strokeSnapshot = null;
+  lastPaintPos   = null;
+});
+
+brushOverlay.addEventListener('pointerleave', () => {
+  if (isPainting) return; // keep cursor if dragging out of bounds
+  const ctx = brushOverlay.getContext('2d')!;
+  ctx.clearRect(0, 0, brushOverlay.width, brushOverlay.height);
 });
 
 // ── Worker dispatch helper ─────────────────────────────────────────────────
