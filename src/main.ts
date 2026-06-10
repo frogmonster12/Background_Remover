@@ -781,7 +781,7 @@ document.querySelectorAll<HTMLButtonElement>('.mode-btn').forEach((btn) =>
 
 const MODEL_NOTES: Record<ModelKind, string> = {
   human: 'ORMBG (Apache-2.0) — best for people & pets in photos',
-  general: 'ISNet general-use (MIT) — illustrations, products & objects',
+  general: 'ISNet general-use (MIT) — illustrations, products & objects. First use downloads 88 MB.',
 };
 
 function setModel(model: ModelKind): void {
