@@ -12,7 +12,7 @@
 //      plausible for the request — text/html is never cached for an asset
 //      request like *.onnx or *.wasm.
 
-const CACHE_VERSION = 'v2.1.0';
+const CACHE_VERSION = 'v2.1.1';
 const CACHE = `cutout-${CACHE_VERSION}`;
 
 // Inject cross-origin isolation headers onto a response.

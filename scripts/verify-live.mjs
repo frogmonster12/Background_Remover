@@ -52,5 +52,18 @@ const isPNG = buf[0] === 0x89 && buf[1] === 0x50;
 const hasAlpha = buf[25] === 6 || buf[25] === 4;
 console.log(`downloaded: ${download.suggestedFilename()} (${(buf.length / 1024).toFixed(0)} KB) PNG=${isPNG} alpha=${hasAlpha}`);
 
+// General model: switching re-runs inference (first use downloads the 88 MB fp16).
+console.log('Switching to General (ISNet) — first use downloads ~88 MB…');
+await page.locator('[data-testid="model-general"]').click();
+await page.locator('#workspace[data-phase="processing"]').waitFor({ state: 'attached', timeout: 15_000 });
+await page.locator('#workspace[data-phase="done"], #workspace[data-phase="error"]')
+  .waitFor({ state: 'attached', timeout: 600_000 });
+const phaseGeneral = await page.locator('#workspace').getAttribute('data-phase');
+console.log('General model phase:', phaseGeneral);
+if (phaseGeneral !== 'done') {
+  console.log('error banner:', await page.locator('#error-banner-text').textContent().catch(() => '?'));
+  consoleLines.slice(-12).forEach((l) => console.log(' ', l.slice(0, 250)));
+}
+
 await browser.close();
-process.exit(isPNG && hasAlpha ? 0 : 1);
+process.exit(isPNG && hasAlpha && phaseGeneral === 'done' ? 0 : 1);

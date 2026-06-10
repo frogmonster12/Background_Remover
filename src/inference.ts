@@ -67,16 +67,22 @@ function onnxFileFor(dtype: 'uint8' | 'fp16' | 'fp32'): string {
  * HTTP 200 + text/html — so transformers.js never sees a 404 and never falls
  * back to the Hugging Face CDN; it tries to parse HTML as ONNX and dies.
  * This probe treats "not ok" OR "text/html for a non-HTML asset" as absent.
- * Uses a 1-byte Range request so probing a 44–88 MB file costs nothing.
+ *
+ * HEAD + no-store, deliberately: an earlier Range-request probe broke the
+ * live site — on hosts that honor Range (GitHub Pages; NOT vite dev/preview,
+ * which is why local tests missed it), the probe's cancelled 206 body raced
+ * the immediately-following real fetch of the same URL through the HTTP
+ * cache / service worker, which then delivered a 1-byte body
+ * (JSON.parse("{") failures). HEAD has no body to cancel, produces no 206,
+ * writes nothing to any cache, and our SW passes non-GET requests through.
  */
 async function localModelPresent(spec: ModelSpec, backend: InferenceBackend): Promise<boolean> {
   const files = ['config.json', 'preprocessor_config.json', onnxFileFor(spec.dtype[backend])];
   for (const file of files) {
     const url = `${env.localModelPath}${spec.id}/${file}`;
     try {
-      const res = await fetch(url, { headers: { Range: 'bytes=0-0' } });
+      const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
       const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
-      void res.body?.cancel();
       if (!res.ok || contentType.includes('text/html')) return false;
     } catch {
       return false;
@@ -202,7 +208,12 @@ function describeLoadFailure(spec: ModelSpec, err: unknown): string {
   const detail = err instanceof Error ? err.message : String(err);
   const isolated = (self as { crossOriginIsolated?: boolean }).crossOriginIsolated === true;
 
-  if (!isolated) {
+  // Blame missing isolation ONLY when the error itself is thread/SAB-shaped.
+  // crossOriginIsolated === false is NORMAL on the first GitHub Pages load
+  // (the SW injects COOP/COEP from the second load on) and single-threaded
+  // WASM works fine there — an unrelated error must not be pinned on COEP.
+  const looksLikeThreadFailure = /shared\s*is\s*disabled|sharedarraybuffer/i.test(detail);
+  if (!isolated && looksLikeThreadFailure) {
     return (
       `Model load failed for ${spec.id}: this page is not cross-origin isolated, ` +
       `so multithreaded WASM is unavailable (COOP/COEP headers missing). ` +

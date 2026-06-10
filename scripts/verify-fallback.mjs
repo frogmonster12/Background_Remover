@@ -21,7 +21,6 @@
 import { chromium } from 'playwright';
 import { execSync, spawn } from 'node:child_process';
 import { existsSync, renameSync } from 'node:fs';
-import { lookup } from 'node:dns/promises';
 import { Resolver } from 'node:dns/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,7 +32,13 @@ const DIST_MODELS_HIDDEN = path.join(ROOT, 'dist', '_models_hidden');
 const FIXTURE = path.join(ROOT, 'tests', 'fixtures', 'hair-sample.jpg');
 const BASE_URL = 'http://localhost:4173';
 const INFERENCE_TIMEOUT = 600_000; // phase A downloads ~44 MB from the CDN
-const HF_HOSTS = ['cas-bridge.xethub.hf.co', 'us.aws.cdn.hf.co'];
+const HF_HOSTS = [
+  'huggingface.co',
+  'cas-bridge.xethub.hf.co',
+  'us.aws.cdn.hf.co',
+  'cdn-lfs.huggingface.co',
+  'cdn-lfs-us-1.huggingface.co',
+];
 
 const isHF = (url) => /huggingface\.co|\.hf\.co/.test(url);
 
@@ -43,24 +48,23 @@ function check(label, ok, extra = '') {
   if (!ok) failures++;
 }
 
-// ── DNS workaround: pin HF CDN hosts that the OS resolver can't resolve ─────
+// ── DNS workaround ───────────────────────────────────────────────────────────
+// Jeff's default resolver is flaky for HF hosts (intermittent timeouts even on
+// huggingface.co itself), so pin EVERY HF host to a 1.1.1.1-resolved IP
+// unconditionally — pinning a working IP is harmless on healthy machines/CI.
 async function hostResolverArgs() {
   const rules = [];
   const cloudflare = new Resolver();
   cloudflare.setServers(['1.1.1.1']);
   for (const host of HF_HOSTS) {
     try {
-      await lookup(host); // OS resolver works — no pin needed
-    } catch {
-      try {
-        const [ip] = await cloudflare.resolve4(host);
-        if (ip) {
-          rules.push(`MAP ${host} ${ip}`);
-          console.log(`(dns) pinned ${host} -> ${ip} via 1.1.1.1`);
-        }
-      } catch {
-        console.log(`(dns) WARNING: ${host} unresolvable even via 1.1.1.1`);
+      const [ip] = await cloudflare.resolve4(host);
+      if (ip) {
+        rules.push(`MAP ${host} ${ip}`);
+        console.log(`(dns) pinned ${host} -> ${ip} via 1.1.1.1`);
       }
+    } catch {
+      console.log(`(dns) WARNING: ${host} unresolvable via 1.1.1.1 — leaving to OS resolver`);
     }
   }
   return rules.length > 0 ? [`--host-resolver-rules=${rules.join(', ')}`] : [];
@@ -106,10 +110,17 @@ try {
   let page = await ctx.newPage();
   const hfRequests = [];
   page.on('request', (req) => { if (isHF(req.url())) hfRequests.push(req.url()); });
+  const consoleLines = [];
+  page.on('console', (m) => consoleLines.push(`[${m.type()}] ${m.text()}`));
+  page.on('requestfailed', (r) => consoleLines.push(`[reqfail] ${r.url().slice(-90)} ${r.failure()?.errorText}`));
 
   await page.goto(BASE_URL);
   const phaseA = await uploadAndWaitPhase(page);
   check('cutout produced with no local models (phase=done)', phaseA === 'done');
+  if (phaseA !== 'done') {
+    console.log('  status:', await page.locator('[data-testid="status-region"]').textContent().catch(() => '?'));
+    consoleLines.slice(-10).forEach((l) => console.log('  ', l.slice(0, 220)));
+  }
   check('Hugging Face CDN request actually made', hfRequests.length > 0,
     hfRequests[0] ? hfRequests[0].slice(0, 90) : 'none recorded');
   await ctx.close();
