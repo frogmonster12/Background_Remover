@@ -2,7 +2,14 @@
 
 ## Phase 11 — Ship Verification (run after Phase 12; executed 2026-06-10)
 
-**Status:** COMPLETE ✓ (checks 1–5 PASS; 6 blocked on repo setup; 7 held)
+**Status:** COMPLETE ✓ — ALL 7 CHECKS PASS. **SHIPPED:**
+<https://frogmonster12.github.io/Background_Remover/> (tag `v2.0.1`).
+Deploy completed 2026-06-10 after repo setup: remote added, `master` pushed as
+`main`, repo made public (Pages requires it on the free plan; open-source
+release per charter), Pages enabled via API, runtime paths made subpath-safe
+(`./sw.js`, APP_BASE-derived `ort/`/`models/`). Live verification
+(`scripts/verify-live.mjs`): real removal on the live URL → PNG with alpha;
+COI false first load / true second load via SW injection — both expected.
 
 ### Results — see SHIP-CHECKLIST.md for the full table
 1. **WebGPU (documented, fixed):** real adapter engages (AMD RX 5600 XT, headed

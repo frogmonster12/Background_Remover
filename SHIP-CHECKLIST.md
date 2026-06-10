@@ -10,8 +10,8 @@ Latest run: **2026-06-10** (v2.0.1 candidate).
 | 3 | Offline | `npm run verify:sw` (persistent profile, real model) | **PASS** | 7/7 incl. "removal works offline (model from cache)" and COI preserved offline; also re-proves poisoned-cache recovery |
 | 4 | Lighthouse | `npx lighthouse http://localhost:4173 --chrome-flags="--headless=new"` vs preview | **PASS** | Performance 98 · Accessibility 100 · Best-Practices 100 · SEO 100. PWA category removed in Lighthouse 12+; PWA evidence = manifest + SW + check 3. Fixed this run: contrast tokens, aria-controls target, label/name mismatches, robots.txt |
 | 5 | No third-party requests | `npx playwright test tests/e2e/network.spec.ts` | **PASS** | 1/1 — zero third-party requests on load |
-| 6 | Deploy + live URL | Push → GitHub Actions → Pages → manual cutout download | **BLOCKED** | No git remote configured and no `gh` CLI on this machine. To unblock: create the GitHub repo, `git remote add origin <url>`, push `master` as `main` (workflow triggers on `main`: `git push -u origin master:main`), enable Pages → GitHub Actions, then verify one end-to-end cutout on the live URL |
-| 7 | Tag | Tag the verified commit | **HELD** | Gated on check 6 per policy. When the live URL verifies, tag `v2.0.1` (do not move the historical `v2.0.0`) |
+| 6 | Deploy + live URL | Push → GitHub Actions → Pages → `node scripts/verify-live.mjs` | **PASS** | Live at <https://frogmonster12.github.io/Background_Remover/>. CI build green (typecheck, 77 unit tests, model download). Real removal completes on the live URL (WASM); downloaded cutout is PNG with alpha (125 KB). `crossOriginIsolated` false on first load (Pages has no custom headers), true from second load via SW header injection — both verified. Repo made public (required for Pages on free plan; project is an open-source release). Runtime paths made subpath-safe for `/Background_Remover/` (`./sw.js`, APP_BASE-derived `ort/` + `models/`) |
+| 7 | Tag | Tag the verified commit | **PASS** | `v2.0.1` tagged at the deployed commit (`bbb99f8`) and pushed. Historical `v2.0.0` untouched |
 
 ## Regression suites (same run)
 
