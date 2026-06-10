@@ -80,14 +80,20 @@ export async function loadModel(
 
   try {
     await tryLoad(preferredBackend);
-  } catch {
+  } catch (err) {
     if (preferredBackend === 'webgpu') {
       // WebGPU not functional — fall back to WASM uint8.
       _pipe = null;
       _activeBackend = null;
       await tryLoad('wasm');
     } else {
-      throw new Error(`WASM model load failed for ${MODEL_ID}. Check network and COEP headers.`);
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `WASM model load failed for ${MODEL_ID}. ` +
+        `Underlying error: ${detail}. ` +
+        `If "shared is disabled" appears above, the page lacks Cross-Origin-Isolation ` +
+        `(COOP + COEP headers). If "404" appears, a model file is missing from /models/.`
+      );
     }
   }
 

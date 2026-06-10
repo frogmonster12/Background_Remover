@@ -21,3 +21,6 @@ Thumbs.db
 .env.local
 tests/output/
 
+
+# TypeScript incremental build info
+tsconfig.tsbuildinfo

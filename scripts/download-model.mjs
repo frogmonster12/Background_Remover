@@ -22,10 +22,16 @@ const ROOT = join(__dirname, '..');
 const MODEL_DIR = join(ROOT, 'public', 'models', 'onnx-community', 'ormbg-ONNX');
 const HF_BASE = 'https://huggingface.co/onnx-community/ormbg-ONNX/resolve/main';
 
+// Fetch exactly the ONNX variants the runtime requests (see src/inference.ts):
+//   - WASM backend   -> dtype 'uint8' -> model_uint8.onnx (44.3 MB)
+//   - WebGPU backend -> dtype 'fp16'  -> model_fp16.onnx  (88.1 MB)
+// Both are self-hosted so neither backend hits the network at runtime. The
+// offline/privacy guarantee depends on every requested file being present locally.
 const FILES = [
   'config.json',
   'preprocessor_config.json',
-  'onnx/model_quantized.onnx',
+  'onnx/model_uint8.onnx',
+  'onnx/model_fp16.onnx',
 ];
 
 async function download(relPath) {
@@ -45,9 +51,9 @@ async function download(relPath) {
   console.log(`  saved ${relPath}`);
 }
 
-// Node 24 has built-in fetch; no polyfill needed
-console.log('Downloading ORMBG model weights…');
-console.log(`  → ${MODEL_DIR}`);
+// Node 24 has built-in fetch; no polyfill needed.
+console.log('Downloading ORMBG model weights...');
+console.log(`  -> ${MODEL_DIR}`);
 
 try {
   for (const file of FILES) {

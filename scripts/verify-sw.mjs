@@ -34,11 +34,13 @@ function check(label, ok) {
   if (!ok) failures++;
 }
 
-// ── Old (broken) sw.js from the last commit ────────────────────────────────
+// ── Old (broken) sw.js, pinned to the last pre-fix commit ──────────────────
+// cb29e33 is the SW fix; its parent still has the unversioned v2.0.0 worker.
+const OLD_SW_REV = 'cb29e33~1';
 const newSW = readFileSync(DIST_SW, 'utf8');
-const oldSW = execSync('git show HEAD:public/sw.js', { cwd: ROOT, encoding: 'utf8' });
+const oldSW = execSync(`git show ${OLD_SW_REV}:public/sw.js`, { cwd: ROOT, encoding: 'utf8' });
 if (!oldSW.includes("'cutout-v2.0.0'")) {
-  console.error('Expected HEAD sw.js to be the old v2.0.0 version — aborting.');
+  console.error(`Expected ${OLD_SW_REV} sw.js to be the old v2.0.0 version — aborting.`);
   process.exit(1);
 }
 
