@@ -6,7 +6,7 @@ import type {
   CompositeOptions,
   BackgroundMode,
 } from './contracts.js';
-import { applyMask, toPNG } from './compose.js';
+import { applyMask, applyMaskRegion, toPNG } from './compose.js';
 import { decodeToBitmap, UnsupportedFormatError } from './formats.js';
 import { createBatchQueue } from './batch.js';
 import { mountBatchView } from './batch-view.js';
@@ -360,6 +360,21 @@ let lastPaintPos: { x: number; y: number } | null = null;
 let pendingPos: { x: number; y: number } | null = null;
 let rafPending = false;
 
+// Full-image source pixels, extracted once per image for region compositing.
+// ~4 bytes/pixel (24 MB at 3000×2000) — freed when a new image loads.
+let sourceData: ImageData | null = null;
+
+function getSourceData(): ImageData | null {
+  if (sourceData) return sourceData;
+  if (!sourceBitmap) return null;
+  const { width, height } = sourceBitmap;
+  const tmp = new OffscreenCanvas(width, height);
+  const ctx = tmp.getContext('2d')!;
+  ctx.drawImage(sourceBitmap, 0, 0);
+  sourceData = ctx.getImageData(0, 0, width, height);
+  return sourceData;
+}
+
 // ── Worker ─────────────────────────────────────────────────────────────────
 
 const worker = new Worker(
@@ -411,6 +426,7 @@ async function processFile(file: File): Promise<void> {
     ]);
     sourceBitmap?.close();
     sourceBitmap = src;
+    sourceData = null;
 
     currentJobId = crypto.randomUUID();
     const req: WorkerRequest = {
@@ -643,33 +659,40 @@ function paintFrame(): void {
   if (!isPainting || !workingMask || !pendingPos || !removalResult) return;
 
   const pos = pendingPos;
-  if (lastPaintPos) {
-    stampLine(
-      workingMask,
-      removalResult.width,
-      removalResult.height,
-      lastPaintPos.x,
-      lastPaintPos.y,
-      pos.x,
-      pos.y,
-      brushRadius,
-      brushMode,
-    );
-  } else {
-    stampLine(
-      workingMask,
-      removalResult.width,
-      removalResult.height,
-      pos.x,
-      pos.y,
-      pos.x,
-      pos.y,
-      brushRadius,
-      brushMode,
-    );
-  }
+  const from = lastPaintPos ?? pos;
+  stampLine(
+    workingMask,
+    removalResult.width,
+    removalResult.height,
+    from.x,
+    from.y,
+    pos.x,
+    pos.y,
+    brushRadius,
+    brushMode,
+  );
   lastPaintPos = pos;
-  paintStrokePreview();
+
+  // Dirty-region redraw: composite only the stroke's bounding box. Transparent
+  // and color modes are per-pixel local; blur/image need the whole frame, so
+  // they keep the (rAF-throttled) full redraw.
+  const src = options.mode === 'transparent' || options.mode === 'color'
+    ? getSourceData()
+    : null;
+  if (src && workingMask) {
+    const pad = brushRadius + 1 + Math.round(options.feather ?? 0);
+    const patch = applyMaskRegion(src, workingMask, options, {
+      x: Math.min(from.x, pos.x) - pad,
+      y: Math.min(from.y, pos.y) - pad,
+      width: Math.abs(pos.x - from.x) + pad * 2,
+      height: Math.abs(pos.y - from.y) + pad * 2,
+    });
+    if (patch) {
+      previewCanvas.getContext('2d')!.putImageData(patch.data, patch.x, patch.y);
+    }
+  } else {
+    paintStrokePreview();
+  }
 
   // Redraw cursor over the updated preview (image → overlay coordinate mapping)
   const overlayX = (pos.x / previewCanvas.width)  * brushOverlay.width;
@@ -789,6 +812,7 @@ newImageBtn.addEventListener('click', () => {
   setPhase('idle');
   sourceBitmap?.close();
   sourceBitmap  = null;
+  sourceData    = null;
   removalResult = null;
   workingMask   = null;
   originalMask  = null;
@@ -849,6 +873,7 @@ brushOverlay.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   brushOverlay.setPointerCapture(e.pointerId);
   isPainting    = true;
+  getSourceData(); // one-time pixel extraction now, not mid-stroke
   strokeSnapshot = new Uint8ClampedArray(workingMask);
   const pos     = getImageCoords(e);
   lastPaintPos  = null;

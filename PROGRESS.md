@@ -1,5 +1,68 @@
 # Progress
 
+## Phase 12 — Repo Cleanup + Brush Performance (dirty-region recomposite)
+
+**Status:** COMPLETE ✓
+
+### Phase 0 — repo hygiene (PASS)
+- Committed orphaned prompt-08 work (`54899f9`): correct model variants in
+  `download-model.mjs` (uint8 + fp16 — a clean CI checkout previously deployed
+  broken), detailed WASM load-failure message, preview COOP/COEP headers
+- Deleted dead `scripts/verify-preview.mjs` (superseded by `verify:sw`); pinned
+  `verify-sw.mjs`'s old-SW reference to `cb29e33~1` (HEAD moved past it)
+- Gitignored `tsconfig.tsbuildinfo`
+- `.gitattributes` (`* text=auto eol=lf` + binary exceptions) committed
+  separately (`c557c61`); index was already LF — phantom diffs were
+  `core.autocrlf` checkout artifacts, now stopped
+- Pruned 3 stale worktrees (`bgrw-batch`/`-compose`/`-ui`; clean, branches merged)
+- Left untouched per instructions: `_prompts/*`, `.claude/settings.json`
+
+### Phase 1 — brush performance
+- **`src/compose.ts`:** new `applyMaskRegion(srcData, mask, options, region)` —
+  composites only a clamped rect from pre-extracted source pixels; returns
+  ImageData + origin for `putImageData`. `applyMask` signature untouched.
+  - Supports transparent + color (the per-pixel-local modes), incl. feather
+  - Region feather uses a summed-area table over the f-expanded rect —
+    **pixel-identical** to `featherMask` (same truncated-window ÷ count math),
+    O(1) per pixel instead of O(f²)
+  - Returns null for blur/image — those need whole-frame context, so the brush
+    falls back to the existing rAF-throttled full redraw in those modes
+- **`src/main.ts`:** dirty-rect per rAF frame (segment bbox + brush radius +
+  feather pad); region patch via `putImageData`; cached full-image `ImageData`
+  extracted once per image on first pointerdown (~16 ms at 3000×2000, freed on
+  new image); full-quality `recomposite()` on pointerup unchanged
+- **`scripts/bench-brush.mjs`:** repeatable Chromium benchmark
+
+### Measured (median, 3000×2000, Chromium)
+| Path | ms / move |
+|---|---|
+| BEFORE: full recomposite + drawImage | **50–88** |
+| region, transparent, brush r=24 (default) | **0.05** |
+| region, transparent, brush r=120 (max) | 0.44 |
+| region, color, r=24 | 0.14 |
+| region, transparent, r=24 + feather 5 | 0.15 |
+| region, transparent, r=120 + feather 20 (worst sliders) | 1.85 |
+| one-time source extraction (per image) | 16.25 |
+
+All region paths are comfortably under 16 ms — ~27× to ~1000× faster than the
+full pass. (First SAT-less attempt hit 385 ms on the worst-slider case; the
+summed-area table fixed it without losing exactness — no second strike.)
+
+### Correctness
+- 8 new Vitest cases prove region output is pixel-identical to a full
+  `applyMask` pass (transparent/color, feather 0/1/2/3, rects overlapping
+  corners and edges, clamping, null for blur/image)
+- Blur/image modes: live stroke uses throttled full redraw (stated trade-off);
+  pointerup always does a full-quality recomposite in every mode
+- Undo/redo/reset untouched (they already used the full `recomposite()` path)
+
+### Verification PASS ✓
+- `typecheck`: 0 errors ✓ — `lint`: 0 errors ✓
+- `test` (Vitest): 77/77 ✓ (8 new) — `test:e2e` (Playwright): 48/48 ✓
+- Brush E2E pixel assertions exercise the region path and pass
+
+---
+
 ## Phase 10 — Service Worker Cache Fix (BLOCKER)
 
 **Status:** COMPLETE ✓ (v2.0.1)

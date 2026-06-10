@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { AlphaMask } from './contracts.js';
-import { applyMask, featherMask, toJPEG, toPNG } from './compose.js';
+import type { AlphaMask, CompositeOptions } from './contracts.js';
+import { applyMask, applyMaskRegion, featherMask, toJPEG, toPNG } from './compose.js';
+import type { Region } from './compose.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -224,6 +225,131 @@ describe('applyMask — feather option', () => {
     // Pixel 0 (far from edge) should be the lowest alpha
     const [, , , a0] = pixelAt(result, 0);
     expect(a).toBeGreaterThanOrEqual(a0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyMaskRegion — must be pixel-identical to the full pass
+// ---------------------------------------------------------------------------
+
+/** Source canvas with a deterministic per-pixel gradient (not flat). */
+function gradientCanvas(w: number, h: number): OffscreenCanvas {
+  const c = new OffscreenCanvas(w, h);
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < w * h; i++) {
+    data[i * 4]     = (i * 7) % 256;
+    data[i * 4 + 1] = (i * 13) % 256;
+    data[i * 4 + 2] = (i * 29) % 256;
+    data[i * 4 + 3] = 255;
+  }
+  c.getContext('2d')!.putImageData(new ImageData(data, w, h), 0, 0);
+  return c;
+}
+
+/** Deterministic non-trivial mask with hard and soft values. */
+function variedMask(w: number, h: number): AlphaMask {
+  const mask = new Uint8ClampedArray(w * h);
+  for (let i = 0; i < w * h; i++) mask[i] = (i * 37) % 256;
+  return mask;
+}
+
+/** Assert region output equals the same rect of a full applyMask pass. */
+function expectRegionMatchesFull(
+  w: number,
+  h: number,
+  options: CompositeOptions,
+  region: Region,
+): void {
+  const src = gradientCanvas(w, h);
+  const mask = variedMask(w, h);
+  const srcData = src.getContext('2d')!.getImageData(0, 0, w, h);
+
+  const fullCanvas = applyMask(src, mask, options);
+  const full = fullCanvas.getContext('2d')!.getImageData(0, 0, w, h);
+  const patch = applyMaskRegion(srcData, mask, options, region);
+
+  expect(patch).not.toBeNull();
+  const { data, x, y } = patch!;
+  for (let yy = 0; yy < data.height; yy++) {
+    for (let xx = 0; xx < data.width; xx++) {
+      for (let k = 0; k < 4; k++) {
+        const regionVal = data.data[(yy * data.width + xx) * 4 + k];
+        const fullVal = full.data[((y + yy) * w + (x + xx)) * 4 + k];
+        if (regionVal !== fullVal) {
+          throw new Error(
+            `pixel mismatch at region (${xx},${yy}) ch${k}: region=${regionVal} full=${fullVal}`,
+          );
+        }
+      }
+    }
+  }
+}
+
+describe('applyMaskRegion — pixel identity with full pass', () => {
+  it('transparent mode, interior rect', () => {
+    expectRegionMatchesFull(32, 24, { mode: 'transparent' }, { x: 5, y: 4, width: 12, height: 10 });
+  });
+
+  it('transparent mode with feather, rect overlapping the image corner', () => {
+    expectRegionMatchesFull(
+      32, 24,
+      { mode: 'transparent', feather: 2 },
+      { x: -4, y: -4, width: 14, height: 12 },
+    );
+  });
+
+  it('transparent mode with feather, rect at the bottom-right edge', () => {
+    expectRegionMatchesFull(
+      32, 24,
+      { mode: 'transparent', feather: 3 },
+      { x: 24, y: 16, width: 20, height: 20 },
+    );
+  });
+
+  it('color mode, interior rect', () => {
+    expectRegionMatchesFull(
+      32, 24,
+      { mode: 'color', color: '#3366cc' },
+      { x: 8, y: 2, width: 16, height: 18 },
+    );
+  });
+
+  it('color mode with feather', () => {
+    expectRegionMatchesFull(
+      32, 24,
+      { mode: 'color', color: '#ff8800', feather: 1 },
+      { x: 0, y: 0, width: 32, height: 24 },
+    );
+  });
+});
+
+describe('applyMaskRegion — clamping and unsupported modes', () => {
+  it('returns null for a rect fully outside the image', () => {
+    const src = gradientCanvas(8, 8);
+    const srcData = src.getContext('2d')!.getImageData(0, 0, 8, 8);
+    const mask = variedMask(8, 8);
+    expect(applyMaskRegion(srcData, mask, { mode: 'transparent' }, { x: 20, y: 20, width: 5, height: 5 })).toBeNull();
+    expect(applyMaskRegion(srcData, mask, { mode: 'transparent' }, { x: -10, y: -10, width: 5, height: 5 })).toBeNull();
+  });
+
+  it('clamps a partially out-of-bounds rect to the image', () => {
+    const src = gradientCanvas(8, 8);
+    const srcData = src.getContext('2d')!.getImageData(0, 0, 8, 8);
+    const mask = variedMask(8, 8);
+    const patch = applyMaskRegion(srcData, mask, { mode: 'transparent' }, { x: -3, y: 5, width: 6, height: 10 });
+    expect(patch).not.toBeNull();
+    expect(patch!.x).toBe(0);
+    expect(patch!.y).toBe(5);
+    expect(patch!.data.width).toBe(3);
+    expect(patch!.data.height).toBe(3);
+  });
+
+  it('returns null for blur and image modes (whole-frame fallback)', () => {
+    const src = gradientCanvas(8, 8);
+    const srcData = src.getContext('2d')!.getImageData(0, 0, 8, 8);
+    const mask = variedMask(8, 8);
+    expect(applyMaskRegion(srcData, mask, { mode: 'blur', blurRadius: 4 }, { x: 0, y: 0, width: 8, height: 8 })).toBeNull();
+    expect(applyMaskRegion(srcData, mask, { mode: 'image' }, { x: 0, y: 0, width: 8, height: 8 })).toBeNull();
   });
 });
 
