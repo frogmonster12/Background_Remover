@@ -1017,7 +1017,8 @@ if ('serviceWorker' in navigator) {
       reloadBtn.addEventListener('click', () => window.location.reload(), { once: true });
     });
 
-    navigator.serviceWorker.register('/sw.js').catch(() => {
+    // Relative so it works at a subpath (e.g. GitHub project pages)
+    navigator.serviceWorker.register('./sw.js').catch(() => {
       // SW registration fails silently — app still works online
     });
   });

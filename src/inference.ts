@@ -10,16 +10,22 @@ import type { InferenceBackend, RemovalResult } from './contracts.js';
 export const MODEL_ID = 'onnx-community/ormbg-ONNX' as const;
 export const MODEL_LICENSE = 'Apache-2.0' as const;
 
+// App base path, derived from this worker bundle's own URL so it works both
+// at the domain root (dev: /src/worker.ts → '/') and at a subpath
+// (GitHub project pages: /<repo>/assets/worker-x.js → '/<repo>/').
+const APP_BASE = new URL('..', self.location.href).pathname;
+
 // Prefer self-hosted weights from public/models/ (populated by `npm run download:model`).
 // Falls back to HuggingFace CDN when local files are absent — both paths work;
 // self-hosting is required for full offline support after one online visit.
 env.allowLocalModels = true;
 env.allowRemoteModels = true;
+env.localModelPath = APP_BASE + 'models/';
 
 // Serve ORT WASM runtime from same origin (public/ort/) to avoid cross-origin restrictions
 // in Workers. The files are copied there by `npm run copy:ort`.
 const wasmEnv = env.backends.onnx.wasm as Record<string, unknown>;
-wasmEnv['wasmPaths'] = '/ort/';
+wasmEnv['wasmPaths'] = APP_BASE + 'ort/';
 
 // Module-level singleton — loaded once per worker lifetime.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
