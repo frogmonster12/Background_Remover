@@ -1,5 +1,39 @@
 # Progress
 
+## Phase 11 — Ship Verification (run after Phase 12; executed 2026-06-10)
+
+**Status:** COMPLETE ✓ (checks 1–5 PASS; 6 blocked on repo setup; 7 held)
+
+### Results — see SHIP-CHECKLIST.md for the full table
+1. **WebGPU (documented, fixed):** real adapter engages (AMD RX 5600 XT, headed
+   Chrome, COI true) but ort-web JSEP cannot execute ORMBG — inference fails with
+   `using ceil() in shape computation is not yet supported for MaxPool`, and the
+   load-only fallback didn't catch inference-time failures, so WebGPU users got a
+   hard error after an 88 MB fp16 download. Fixed: `WEBGPU_ENABLED = false` in
+   `inference.ts` (probe skipped until ort-web adds ceil-mode MaxPool); MODELS.md
+   documents the finding. Re-verified headed: phase=done on WASM, uint8 fetched.
+2. **Production E2E:** new `playwright.preview.config.ts` + `npm run
+   test:e2e:preview` runs the integration spec against the built `dist/` —
+   **8/8** with the real model.
+3. **Offline:** `verify:sw` **7/7** (offline removal from cache, COI preserved).
+4. **Lighthouse (after fixes):** Performance **98**, Accessibility **100**,
+   Best-Practices **100**, SEO **100**. (PWA category removed in Lighthouse 12+.)
+   Fixes this run: `--on-surface-dim` lightened to ≥4.5:1; new `--on-primary-tint`
+   token for active-button text; `.quality-note` opacity removed;
+   `aria-controls="single-panel"` target id added; dropzone switched to
+   `aria-labelledby` over its visible text; download button labels match visible
+   text; `public/robots.txt` added (SPA fallback was serving HTML for it).
+5. **Network:** zero third-party requests on load — 1/1.
+6. **Deploy: BLOCKED** — no git remote configured, no `gh` CLI installed. Unblock
+   steps in SHIP-CHECKLIST.md (create repo, push `master:main`, enable Pages).
+7. **Tag: HELD** per "only if 1–6 pass". When live URL verifies, tag **v2.0.1**
+   at the verified commit; leave historical `v2.0.0` where it is.
+
+### Regression counts (post-fixes)
+`typecheck` 0 errors · `lint` 0 errors · `test` 77/77 · `test:e2e` 48/48
+
+---
+
 ## Phase 12 — Repo Cleanup + Brush Performance (dirty-region recomposite)
 
 **Status:** COMPLETE ✓
