@@ -1,5 +1,38 @@
 # Progress
 
+## Phase 8 — Model-load hardening: CDN fallback + honest errors (2026-06-10, ran after Phase 13)
+
+**Status:** COMPLETE ✓ — all prompts in `_prompts/` are now executed.
+
+### Done
+- **`src/inference.ts`:** `localModelPresent()` probes the self-hosted files a
+  load will request (config, preprocessor, dtype's .onnx) with 1-byte Range
+  requests; a 200-`text/html` answer (dev/preview SPA fallback for a missing
+  file) or `!ok` counts as absent → `env.allowLocalModels=false` for that load
+  so transformers.js goes straight to the HF CDN. Loads are serialized (global
+  env flags must not interleave across the two models).
+- **Error honesty** (`describeLoadFailure`): COEP is blamed ONLY when
+  `crossOriginIsolated === false`; missing files name the model + resolved
+  local path; anything else surfaces the real error.
+- **`index.html` CSP:** `connect-src` adds `https://*.hf.co` — HF LFS now
+  redirects to `cas-bridge.xethub.hf.co` / `us.aws.cdn.hf.co`, which the old
+  allowlist (cdn-lfs hosts only) would block, silently killing the fallback.
+- **`public/sw.js`:** `shouldCache` requires exactly status 200 — `cache.put`
+  throws on the probe's 206 partials. Re-verified: `verify:sw` 9/9.
+- **`scripts/verify-fallback.mjs`** (`npm run verify:fallback`): builds, hides
+  `dist/models/`, and checks (A) CDN fallback fires + cutout works on a fresh-
+  clone simulation, (B) with the CDN also blocked the error names the real
+  cause and never mentions COEP, (C) restored models → cutout with ZERO HF
+  requests. Pins HF CDN hosts via 1.1.1.1 `--host-resolver-rules` when the
+  local resolver fails (the Jeff-machine DNS issue, see Phase 13 notes).
+
+### Verification PASS ✓ (counts)
+- `verify:fallback` **7/7** (first run, no strikes) · `verify:sw` **9/9**
+- `typecheck` 0 · `lint` 0 · `test` **77/77** · `test:e2e` **50/50** ·
+  `test:e2e:integration` **9/9**
+
+---
+
 ## Phase 13 — General-purpose model behind Human/General toggle (2026-06-10)
 
 **Status:** COMPLETE ✓ — **ISNet general-use (`imgly/isnet-general-onnx`, MIT)**
