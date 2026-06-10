@@ -10,6 +10,15 @@
 /** Which compute backend the model ran on. */
 export type InferenceBackend = 'webgpu' | 'wasm';
 
+/**
+ * Which segmentation model to run.
+ * - 'human'   — ORMBG: best on photos of people/pets (default).
+ * - 'general' — ISNet general-use: illustrations, products, arbitrary subjects.
+ * Added for the Human/General toggle (prompt 13) as an OPTIONAL field so all
+ * pre-existing messages remain valid; omitted means 'human'.
+ */
+export type ModelKind = 'human' | 'general';
+
 /** Background replacement mode for composite step. */
 export type BackgroundMode = 'transparent' | 'color' | 'blur' | 'image';
 
@@ -62,6 +71,8 @@ export interface WorkerRequest {
   jobId: string;
   /** The source image, transferred (zero-copy) to the worker. */
   bitmap: ImageBitmap;
+  /** Model to run. Optional — omitted means 'human' (ORMBG). */
+  model?: ModelKind;
 }
 
 /** Worker → main thread: job succeeded. */

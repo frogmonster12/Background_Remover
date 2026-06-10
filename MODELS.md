@@ -2,6 +2,13 @@
 
 Only MIT or Apache-2.0 models. Do NOT use BRIA RMBG-1.4 / RMBG-2.0 (non-commercial).
 
+The app ships **two** models behind the Human/General toggle (default: Human):
+
+| Toggle | Model | HF repo | License | WASM file | Size |
+|--------|-------|---------|---------|-----------|------|
+| **Human** (default) | ORMBG | `onnx-community/ormbg-ONNX` | Apache-2.0 | `model_uint8.onnx` | 44.3 MB |
+| **General** | ISNet general-use | `imgly/isnet-general-onnx` | MIT | `model_fp16.onnx` | 88.2 MB |
+
 ## Chosen model — ORMBG (Apache-2.0)
 
 | Field | Value |
@@ -61,6 +68,39 @@ const pipe = await pipeline('background-removal', 'onnx-community/ormbg-ONNX', {
 const output = await pipe(rawImage); // returns RawImage (RGBA)
 // Alpha channel = foreground mask: 255 = keep, 0 = remove
 ```
+
+---
+
+## General model — ISNet general-use (MIT)
+
+| Field | Value |
+|-------|-------|
+| Model | ISNet general-use (DIS / Dichotomous Image Segmentation) |
+| HF Repo | `imgly/isnet-general-onnx` (published by IMG.LY GmbH) |
+| Base model | `xuebinqin/DIS` isnet-general-use (Apache-2.0) |
+| License | **MIT** (HF repo tag; base model Apache-2.0 — both permissive) |
+| On-disk size | fp16: 88.2 MB · fp32: 176 MB (fp32 not used) |
+| Backend used | WASM (**fp16** — no uint8 variant published; fp16 verified working in ort-web WASM, spike 2026-06-10) |
+| Per-image time | ~3.7–4.2 s on 640×480 WASM (same ballpark as ORMBG) |
+| Input size | 1024×1024 (per `preprocessor_config.json`) |
+| Good at | Illustrations/cartoons, products, arbitrary objects — the domains ORMBG fails on |
+| Restrictions | WebGPU disabled app-wide (see WebGPU note above — ISNet shares the MaxPool-ceil architecture). Self-hosted via `npm run download:model`; offline-capable after first use like ORMBG. |
+
+Spike evidence (2026-06-10, Playwright Chromium, WASM): on the cartoon fixture
+ORMBG punches a hole through the subject and masks in a cloud
+(`tests/output/cartoon-mask-human.png`), while ISNet returns a complete subject
+(`cartoon-mask-general.png`); the product fixture cuts cleanly
+(`product-mask-general.png`). Test: `tests/e2e/inference-general.spec.ts`.
+
+### License verification
+
+The HF repo `imgly/isnet-general-onnx` is tagged **MIT** by IMG.LY GmbH (the
+vendor behind `@imgly/background-removal`, which ships these exact weights).
+The underlying ISNet general-use checkpoint comes from `xuebinqin/DIS`
+(Apache-2.0). No BRIA / non-commercial components.
+
+Note: `onnx-community/ISNet-ONNX` hosts the *same architecture* but is tagged
+AGPL-3.0 — do NOT swap repos casually; the imgly repo is the permissive one.
 
 ---
 

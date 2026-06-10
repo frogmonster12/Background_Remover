@@ -68,6 +68,16 @@ async function uploadAndWaitPhase(page) {
   return page.locator('#workspace').getAttribute('data-phase');
 }
 
+// Switch the loaded image to the General (ISNet) model and wait for the re-run.
+async function switchToGeneralAndWait(page) {
+  await page.locator('[data-testid="model-general"]').click();
+  await page.locator('#workspace[data-phase="processing"]')
+    .waitFor({ state: 'attached', timeout: 15_000 });
+  await page.locator('#workspace[data-phase="done"], #workspace[data-phase="error"]')
+    .waitFor({ state: 'attached', timeout: INFERENCE_TIMEOUT });
+  return page.locator('#workspace').getAttribute('data-phase');
+}
+
 try {
   // ── Phase A: reproduce the broken profile with the OLD sw.js ─────────────
   console.log('Phase A — reproduce broken state (old v2.0.0 SW, poisoned cache)');
@@ -116,12 +126,19 @@ try {
   const phaseFixed = await uploadAndWaitPhase(page);
   check('background removal works after update (phase=done)', phaseFixed === 'done');
 
+  // First online use of the General model — warms the SW cache with the fp16 weights.
+  const phaseGeneralOnline = await switchToGeneralAndWait(page);
+  check('General model (ISNet) works online (phase=done)', phaseGeneralOnline === 'done');
+
   // ── Phase C: offline reload, removal still works ──────────────────────────
   console.log('\nPhase C — offline');
   await ctx.setOffline(true);
   await page.reload();
   const phaseOffline = await uploadAndWaitPhase(page);
   check('background removal works offline (model from cache)', phaseOffline === 'done');
+
+  const phaseGeneralOffline = await switchToGeneralAndWait(page);
+  check('General model works offline (fp16 from cache)', phaseGeneralOffline === 'done');
 
   const isolated = await page.evaluate(() => window.crossOriginIsolated);
   check('crossOriginIsolated preserved offline (COI headers from SW cache)', isolated === true);

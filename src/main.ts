@@ -5,6 +5,7 @@ import type {
   RemovalResult,
   CompositeOptions,
   BackgroundMode,
+  ModelKind,
 } from './contracts.js';
 import { applyMask, applyMaskRegion, toPNG } from './compose.js';
 import { decodeToBitmap, UnsupportedFormatError } from './formats.js';
@@ -198,7 +199,11 @@ function buildHTML(): string {
 
       <section class="control-section" aria-labelledby="quality-section-label">
         <h2 class="section-label" id="quality-section-label">Model</h2>
-        <p class="quality-note">ORMBG (Apache-2.0) — fast, single-pass removal</p>
+        <div class="quality-grid" role="group" aria-label="Segmentation model">
+          <button class="quality-btn active" data-model="human" data-testid="model-human" aria-pressed="true">Human</button>
+          <button class="quality-btn" data-model="general" data-testid="model-general" aria-pressed="false">General</button>
+        </div>
+        <p class="quality-note" id="model-note">ORMBG (Apache-2.0) — best for people &amp; pets in photos</p>
       </section>
 
       <div class="divider" aria-hidden="true"></div>
@@ -344,6 +349,7 @@ let bgImageBitmap: ImageBitmap | null = null;
 let bgObjectURL: string | null = null;
 let currentJobId = '';
 let options: CompositeOptions = { mode: 'transparent', feather: 0 };
+let activeModel: ModelKind = 'human';
 
 // Brush state
 let workingMask: Uint8ClampedArray | null = null;
@@ -433,6 +439,7 @@ async function processFile(file: File): Promise<void> {
       type: 'remove-background',
       jobId: currentJobId,
       bitmap: workerBm,
+      model: activeModel,
     };
     worker.postMessage(req, [workerBm]);
   } catch (err) {
@@ -770,6 +777,34 @@ document.querySelectorAll<HTMLButtonElement>('.mode-btn').forEach((btn) =>
   btn.addEventListener('click', () => setBackgroundMode(btn.dataset['mode'] as BackgroundMode)),
 );
 
+// ── Model toggle (Human / General) ─────────────────────────────────────────
+
+const MODEL_NOTES: Record<ModelKind, string> = {
+  human: 'ORMBG (Apache-2.0) — best for people & pets in photos',
+  general: 'ISNet general-use (MIT) — illustrations, products & objects',
+};
+
+function setModel(model: ModelKind): void {
+  if (model === activeModel) return;
+  activeModel = model;
+
+  document.querySelectorAll<HTMLButtonElement>('.quality-btn').forEach((btn) => {
+    const active = btn.dataset['model'] === model;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', String(active));
+  });
+  const note = document.getElementById('model-note');
+  if (note) note.textContent = MODEL_NOTES[model];
+
+  // Re-run inference on the loaded image with the new model. Brush edits are
+  // intentionally discarded — they applied to the previous model's mask.
+  if (sourceFile) void processFile(sourceFile);
+}
+
+document.querySelectorAll<HTMLButtonElement>('.quality-btn').forEach((btn) =>
+  btn.addEventListener('click', () => setModel(btn.dataset['model'] as ModelKind)),
+);
+
 bgColorInput.addEventListener('input', () => {
   options = { ...options, color: bgColorInput.value };
   recomposite();
@@ -939,7 +974,7 @@ function dispatchJob(bitmap: ImageBitmap): Promise<RemovalResult> {
       }
     };
     worker.addEventListener('message', handler);
-    const req: WorkerRequest = { type: 'remove-background', jobId, bitmap };
+    const req: WorkerRequest = { type: 'remove-background', jobId, bitmap, model: activeModel };
     worker.postMessage(req, [bitmap]);
   });
 }

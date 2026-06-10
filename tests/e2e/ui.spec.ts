@@ -48,6 +48,27 @@ test.describe('UI workspace', () => {
     expect(download.suggestedFilename()).toMatch(/\.png$/i);
   });
 
+  // ── Model toggle ───────────────────────────────────────────────────────
+
+  test('model toggle: Human is the default', async ({ page }) => {
+    await expect(page.locator('[data-testid="model-human"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-testid="model-general"]')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('#model-note')).toContainText('ORMBG');
+  });
+
+  test('model toggle: switching to General re-processes the loaded image', async ({ page }) => {
+    await uploadAndWait(page);
+    await page.locator('[data-testid="model-general"]').click();
+
+    await expect(page.locator('[data-testid="model-general"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-testid="model-human"]')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('#model-note')).toContainText('ISNet');
+
+    // Re-runs inference and lands back in done with the preview rendered.
+    await expect(page.locator('[data-testid="status-region"]')).toHaveText(/done/i, { timeout: 8000 });
+    await expect(page.locator('[data-testid="preview-canvas"]')).toBeVisible();
+  });
+
   // ── Background modes ───────────────────────────────────────────────────
 
   test('background mode: transparent (default)', async ({ page }) => {

@@ -1,6 +1,6 @@
 {
   "name": "bg-remover-web",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Browser-only AI background remover — all inference runs client-side",
   "license": "MIT",
   "private": false,

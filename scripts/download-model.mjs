@@ -1,42 +1,56 @@
 #!/usr/bin/env node
 /**
- * Download ORMBG ONNX model weights to public/models/ for self-hosting.
+ * Download ONNX model weights to public/models/ for self-hosting.
  *
  * Run once before building:
  *   npm run download:model
  *
- * This puts the model at public/models/onnx-community/ormbg-ONNX/ which is
- * served at /models/... at runtime. The service worker caches these files
- * after first load, enabling full offline use on repeat visits.
+ * Models land at public/models/<repo-id>/ which is served at /models/... at
+ * runtime. The service worker caches these files after first load, enabling
+ * full offline use on repeat visits.
  *
  * public/models/ is gitignored — weights are never committed.
  */
 
-import { createWriteStream, mkdirSync, existsSync } from 'fs';
+import { createWriteStream, mkdirSync, existsSync, renameSync, rmSync } from 'fs';
 import { pipeline } from 'stream/promises';
 import { join, dirname, sep } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
-const MODEL_DIR = join(ROOT, 'public', 'models', 'onnx-community', 'ormbg-ONNX');
-const HF_BASE = 'https://huggingface.co/onnx-community/ormbg-ONNX/resolve/main';
+const MODELS_ROOT = join(ROOT, 'public', 'models');
 
 // Fetch exactly the ONNX variants the runtime requests (see src/inference.ts):
-//   - WASM backend   -> dtype 'uint8' -> model_uint8.onnx (44.3 MB)
-//   - WebGPU backend -> dtype 'fp16'  -> model_fp16.onnx  (88.1 MB)
-// Both are self-hosted so neither backend hits the network at runtime. The
-// offline/privacy guarantee depends on every requested file being present locally.
-const FILES = [
-  'config.json',
-  'preprocessor_config.json',
-  'onnx/model_uint8.onnx',
-  'onnx/model_fp16.onnx',
+//   - ORMBG (Human):   WASM -> model_uint8.onnx; WebGPU -> model_fp16.onnx
+//   - ISNet (General): WASM -> model_fp16.onnx (no uint8 variant published)
+// Every requested file must be present locally or the runtime falls back to
+// the HuggingFace CDN, weakening the offline/privacy guarantee.
+const MODELS = [
+  {
+    name: 'ORMBG (Human, Apache-2.0)',
+    repo: 'onnx-community/ormbg-ONNX',
+    files: [
+      'config.json',
+      'preprocessor_config.json',
+      'onnx/model_uint8.onnx',
+      'onnx/model_fp16.onnx',
+    ],
+  },
+  {
+    name: 'ISNet general-use (General, MIT)',
+    repo: 'imgly/isnet-general-onnx',
+    files: [
+      'config.json',
+      'preprocessor_config.json',
+      'onnx/model_fp16.onnx',
+    ],
+  },
 ];
 
-async function download(relPath) {
-  const url = `${HF_BASE}/${relPath}`;
-  const dest = join(MODEL_DIR, relPath.split('/').join(sep));
+async function download(repo, relPath) {
+  const url = `https://huggingface.co/${repo}/resolve/main/${relPath}`;
+  const dest = join(MODELS_ROOT, ...repo.split('/'), relPath.split('/').join(sep));
   mkdirSync(dirname(dest), { recursive: true });
 
   if (existsSync(dest)) {
@@ -44,22 +58,31 @@ async function download(relPath) {
     return;
   }
 
+  // Stream to a .part file and rename on success so an interrupted download
+  // never leaves a truncated file that a re-run would skip as "already exists".
   console.log(`  fetch ${relPath}`);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  await pipeline(res.body, createWriteStream(dest));
+  const part = `${dest}.part`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+    await pipeline(res.body, createWriteStream(part));
+    renameSync(part, dest);
+  } catch (err) {
+    rmSync(part, { force: true });
+    throw err;
+  }
   console.log(`  saved ${relPath}`);
 }
 
 // Node 24 has built-in fetch; no polyfill needed.
-console.log('Downloading ORMBG model weights...');
-console.log(`  -> ${MODEL_DIR}`);
-
 try {
-  for (const file of FILES) {
-    await download(file);
+  for (const model of MODELS) {
+    console.log(`\nDownloading ${model.name} -> public/models/${model.repo}/`);
+    for (const file of model.files) {
+      await download(model.repo, file);
+    }
   }
-  console.log('\nDone. Run `npm run build` (or `npm run dev`) to use the local model.');
+  console.log('\nDone. Run `npm run build` (or `npm run dev`) to use the local models.');
 } catch (err) {
   console.error('\nDownload failed:', err.message);
   process.exit(1);

@@ -151,6 +151,49 @@ test.describe('single-image flow', () => {
     // The images should differ
     expect(before.equals(after)).toBe(false);
   });
+
+  // ── model toggle (Human vs General, real models) ──
+
+  test('model toggle: General fixes the cartoon ORMBG breaks (before/after saved)', async () => {
+    // Reset feather left at 20 by the previous test — alpha sampling needs hard edges.
+    const featherSlider = sharedPage.locator('#feather');
+    await featherSlider.fill('0');
+    await featherSlider.dispatchEvent('input');
+
+    await sharedPage.locator('#new-image-btn').click();
+    await uploadFile(sharedPage, 'cartoon-sample.png');
+    await waitForDone(sharedPage, 120_000);
+
+    // Belly center of the 640×480 cartoon fixture — ORMBG wrongly cuts it out.
+    const sampleBellyAlpha = () => sharedPage.evaluate(() => {
+      const canvas = document.querySelector('[data-testid="preview-canvas"]') as HTMLCanvasElement;
+      return canvas.getContext('2d')!.getImageData(320, 345, 1, 1).data[3];
+    });
+
+    const beforeShot = await sharedPage.locator('[data-testid="preview-canvas"]').screenshot();
+    fs.writeFileSync(path.join(OUTPUT, 'cartoon-human-before.png'), beforeShot);
+    const bellyBefore = await sampleBellyAlpha();
+
+    await sharedPage.locator('[data-testid="model-general"]').click();
+    // Switching re-runs inference: phase leaves 'done' immediately…
+    await sharedPage
+      .locator('#workspace[data-phase="processing"]')
+      .waitFor({ state: 'attached', timeout: 10_000 });
+    // …and the first General run also loads the 88 MB fp16 model.
+    await waitForDone(sharedPage, 300_000);
+
+    const afterShot = await sharedPage.locator('[data-testid="preview-canvas"]').screenshot();
+    fs.writeFileSync(path.join(OUTPUT, 'cartoon-general-after.png'), afterShot);
+    const bellyAfter = await sampleBellyAlpha();
+
+    // ORMBG punches a hole through the subject; ISNet keeps it whole.
+    expect(bellyBefore, 'ORMBG (Human) loses the belly region').toBeLessThan(64);
+    expect(bellyAfter, 'ISNet (General) keeps the subject intact').toBeGreaterThan(128);
+
+    // Restore the default model for any later tests.
+    await sharedPage.locator('[data-testid="model-human"]').click();
+    await waitForDone(sharedPage, 120_000);
+  });
 });
 
 // ── batch test ────────────────────────────────────────────────────────────

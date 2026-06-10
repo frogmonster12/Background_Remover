@@ -4,11 +4,34 @@ import {
   env,
   type ImageSegmentationPipelineOutput,
 } from '@huggingface/transformers';
-import type { InferenceBackend, RemovalResult } from './contracts.js';
+import type { InferenceBackend, ModelKind, RemovalResult } from './contracts.js';
 
-// Model: ORMBG (Apache-2.0). Confirmed in MODELS.md.
-export const MODEL_ID = 'onnx-community/ormbg-ONNX' as const;
-export const MODEL_LICENSE = 'Apache-2.0' as const;
+/** Per-model config. Licenses verified in MODELS.md — MIT/Apache-2.0 only. */
+interface ModelSpec {
+  /** HF repo id — also the path under public/models/ when self-hosted. */
+  id: string;
+  license: 'Apache-2.0' | 'MIT';
+  /** ONNX dtype requested per backend (must match files fetched by scripts/download-model.mjs). */
+  dtype: Record<InferenceBackend, 'uint8' | 'fp16' | 'fp32'>;
+}
+
+export const MODEL_REGISTRY: Record<ModelKind, ModelSpec> = {
+  human: {
+    id: 'onnx-community/ormbg-ONNX',
+    license: 'Apache-2.0',
+    dtype: { wasm: 'uint8', webgpu: 'fp16' },
+  },
+  general: {
+    id: 'imgly/isnet-general-onnx',
+    license: 'MIT',
+    // No uint8 variant published; fp16 verified working in ort-web WASM (see MODELS.md).
+    dtype: { wasm: 'fp16', webgpu: 'fp16' },
+  },
+};
+
+// Back-compat aliases for the default (Human) model.
+export const MODEL_ID = MODEL_REGISTRY.human.id;
+export const MODEL_LICENSE = MODEL_REGISTRY.human.license;
 
 // App base path, derived from this worker bundle's own URL so it works both
 // at the domain root (dev: /src/worker.ts → '/') and at a subpath
@@ -27,17 +50,18 @@ env.localModelPath = APP_BASE + 'models/';
 const wasmEnv = env.backends.onnx.wasm as Record<string, unknown>;
 wasmEnv['wasmPaths'] = APP_BASE + 'ort/';
 
-// Module-level singleton — loaded once per worker lifetime.
+// Pipeline singletons — one per model, loaded once per worker lifetime.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _pipe: any = null;
+const _pipes = new Map<ModelKind, any>();
 let _activeBackend: InferenceBackend | null = null;
 
 // ORMBG cannot run on ort-web's WebGPU (JSEP) backend today: the model loads,
 // but inference fails with "using ceil() in shape computation is not yet
 // supported for MaxPool" — an ort-web operator gap, verified on real hardware
-// (AMD RX 5600 XT, Chrome headed, cross-origin-isolated, 2026-06). Flip this
-// once ort-web supports ceil-mode MaxPool; until then the probe is skipped so
-// WebGPU-capable visitors don't download the 88 MB fp16 model just to fail.
+// (AMD RX 5600 XT, Chrome headed, cross-origin-isolated, 2026-06). ISNet shares
+// the MaxPool-with-ceil architecture, so the same gap applies. Flip this once
+// ort-web supports ceil-mode MaxPool; until then the probe is skipped so
+// WebGPU-capable visitors don't download fp16 models just to fail.
 const WEBGPU_ENABLED = false as boolean;
 
 /**
@@ -65,15 +89,18 @@ export async function detectBackend(): Promise<InferenceBackend> {
 }
 
 /**
- * Load the background-removal pipeline singleton.
+ * Load the background-removal pipeline singleton for the given model.
  * Returns the backend actually used (may fall back from webgpu → wasm).
- * Idempotent: subsequent calls with a matching backend are no-ops.
+ * Idempotent per model: subsequent calls are no-ops.
  */
 export async function loadModel(
+  model: ModelKind,
   preferredBackend: InferenceBackend,
   onProgress?: (progress: number) => void,
 ): Promise<InferenceBackend> {
-  if (_pipe !== null && _activeBackend !== null) return _activeBackend;
+  if (_pipes.has(model) && _activeBackend !== null) return _activeBackend;
+
+  const spec = MODEL_REGISTRY[model];
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const progressCallback = onProgress ? (data: any) => {
@@ -83,13 +110,12 @@ export async function loadModel(
   } : undefined;
 
   const tryLoad = async (backend: InferenceBackend) => {
-    // Use uint8 quantized model (44.3 MB) for WASM; fp16 (88.1 MB) for WebGPU.
-    const dtype = backend === 'webgpu' ? 'fp16' : 'uint8';
-    _pipe = await pipeline('background-removal', MODEL_ID, {
+    const pipe = await pipeline('background-removal', spec.id, {
       device: backend,
-      dtype,
+      dtype: spec.dtype[backend],
       progress_callback: progressCallback,
     });
+    _pipes.set(model, pipe);
     _activeBackend = backend;
   };
 
@@ -97,14 +123,13 @@ export async function loadModel(
     await tryLoad(preferredBackend);
   } catch (err) {
     if (preferredBackend === 'webgpu') {
-      // WebGPU not functional — fall back to WASM uint8.
-      _pipe = null;
-      _activeBackend = null;
+      // WebGPU not functional — fall back to WASM.
+      _pipes.delete(model);
       await tryLoad('wasm');
     } else {
       const detail = err instanceof Error ? err.message : String(err);
       throw new Error(
-        `WASM model load failed for ${MODEL_ID}. ` +
+        `WASM model load failed for ${spec.id}. ` +
         `Underlying error: ${detail}. ` +
         `If "shared is disabled" appears above, the page lacks Cross-Origin-Isolation ` +
         `(COOP + COEP headers). If "404" appears, a model file is missing from /models/.`
@@ -116,21 +141,23 @@ export async function loadModel(
   return _activeBackend;
 }
 
-/** Return the backend the pipeline was loaded on (null if not loaded). */
+/** Return the backend the pipelines run on (null if nothing loaded). */
 export function activeBackend(): InferenceBackend | null {
   return _activeBackend;
 }
 
 /**
- * Run background removal on an ImageBitmap.
- * Caller must have called loadModel() first.
+ * Run background removal on an ImageBitmap with the given model.
+ * Caller must have called loadModel(model, ...) first.
  * Returns a RemovalResult with a 1-channel alpha mask.
  */
 export async function runInference(
   bitmap: ImageBitmap,
+  model: ModelKind,
 ): Promise<RemovalResult> {
-  if (_pipe === null || _activeBackend === null) {
-    throw new Error('Pipeline not loaded. Call loadModel() first.');
+  const pipe = _pipes.get(model);
+  if (pipe === undefined || _activeBackend === null) {
+    throw new Error(`Pipeline for model "${model}" not loaded. Call loadModel() first.`);
   }
 
   const inferenceStart = performance.now();
@@ -144,7 +171,7 @@ export async function runInference(
   const rawImage = new RawImage(imageData.data, bitmap.width, bitmap.height, 4);
 
   // Run background-removal pipeline. Output is an array of RawImages (RGBA cutout).
-  const output = await _pipe(rawImage) as ImageSegmentationPipelineOutput;
+  const output = await pipe(rawImage) as ImageSegmentationPipelineOutput;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const resultImage: RawImage = (output as any)[0];
 

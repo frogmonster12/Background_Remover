@@ -49,17 +49,17 @@ Once the page and model are loaded, all processing happens on-device. Verified b
 
 ---
 
-## Model
+## Models
 
-| Field | Value |
-|-------|-------|
-| Model | ORMBG (Open Robust Matting Background Removal) |
-| Source | `onnx-community/ormbg-ONNX` |
-| License | **Apache-2.0** |
-| Size | 44 MB (uint8 quantized) |
-| Backend | WebAssembly (SIMD); WebGPU on supported hardware |
+Two models, switchable in the sidebar (downloads happen on first use):
 
-See [MODELS.md](MODELS.md) for the full model registry and rejected candidates.
+| Toggle | Model | Source | License | Size | Best for |
+|--------|-------|--------|---------|------|----------|
+| **Human** (default) | ORMBG | `onnx-community/ormbg-ONNX` | Apache-2.0 | 44 MB (uint8) | People and pets in photos |
+| **General** | ISNet general-use | `imgly/isnet-general-onnx` | MIT | 88 MB (fp16) | Illustrations, products, objects |
+
+Both run on WebAssembly (SIMD). See [MODELS.md](MODELS.md) for the full model
+registry, benchmark notes, and rejected candidates.
 
 ---
 
@@ -70,6 +70,7 @@ See [MODELS.md](MODELS.md) for the full model registry and rejected candidates.
 | This repository | MIT |
 | ORMBG model weights | Apache-2.0 |
 | onnx-community/ormbg-ONNX export | Apache-2.0 |
+| ISNet general-use weights (imgly/isnet-general-onnx) | MIT |
 | fflate (ZIP) | MIT |
 | heic2any | MIT |
 | @huggingface/transformers | Apache-2.0 |
@@ -88,7 +89,7 @@ npm install
 npm run copy:ort
 
 # 3. (Optional) Download model weights for offline support
-#    ~44 MB, written to public/models/ (gitignored)
+#    ~132 MB (both models), written to public/models/ (gitignored)
 npm run download:model
 
 # 4. Start dev server
