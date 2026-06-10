@@ -1,5 +1,48 @@
 # Progress
 
+## Ship v2.1.1 — hotfix for a live-only Phase-8 regression (2026-06-10)
+
+**Status:** deployed + verified live (see end of section).
+
+**What happened:** v2.1.0 (Phase 13 + Phase 8) deployed clean — all local
+suites green — but `verify-live` failed on the deployed URL: first-load model
+load died with `JSON.parse` errors and the new error message wrongly blamed
+COEP. **Live-only root cause:** the Phase-8 local-file probe used a 1-byte
+`Range` request. GitHub Pages honors Range (real 206s); vite dev/preview do
+NOT, so no local test ever exercised that path. The probe's cancelled 206 body
+raced the immediately-following real fetch of the same URL through the HTTP
+cache/SW and delivered a 1-byte body (`{`) — `JSON.parse("{")` is exactly
+"Expected property name or '}' at position 1". Confirmed live via
+request-failure capture: `net::ERR_ABORTED` on the real `config.json` fetch.
+
+**Fixes (`ac78129`):**
+- Probe = `HEAD` + `cache: 'no-store'` — no body to cancel, no 206, no cache
+  writes; the SW passes non-GET through untouched.
+- `describeLoadFailure`: COEP blamed ONLY for thread/SAB-shaped errors.
+  `crossOriginIsolated === false` is NORMAL on the first Pages load (SW
+  injects COOP/COEP from the second load on) — it must not mask other errors.
+- `verify-live.mjs` now also switches to General and requires `phase=done` —
+  release checks cover both models from now on.
+- `verify-fallback.mjs` pins ALL HF hosts via 1.1.1.1 (local resolver now
+  fails intermittently even on `huggingface.co`); prints failure diagnostics.
+  Note: `cdn-lfs*.huggingface.co` no longer exist in DNS — HF moved fully to
+  `*.hf.co`; the CSP keeps both.
+- Versions: package.json **2.1.1**, `CACHE_VERSION` **v2.1.1** — the
+  cache wipe on update is what recovers any visitor who hit broken v2.1.0.
+
+**Lesson recorded:** local dev/preview servers don't honor Range requests —
+anything conditional on real static-host behavior (206s, HEAD, redirects)
+must be verified on the live URL before tagging. `verify-live` is now part of
+the release procedure for BOTH models (HANDOFF.md).
+
+**Re-verified before push:** typecheck 0 · lint 0 · unit 77/77 · e2e 50/50 ·
+integration 9/9 · verify:fallback 7/7 · verify:sw 9/9.
+
+**Tags:** v2.1.0 points at the broken-on-live commit — deleted/superseded by
+**v2.1.1** at `ac78129` after live verification passed.
+
+---
+
 ## Phase 8 — Model-load hardening: CDN fallback + honest errors (2026-06-10, ran after Phase 13)
 
 **Status:** COMPLETE ✓ — all prompts in `_prompts/` are now executed.
