@@ -11,7 +11,7 @@ Only MIT or Apache-2.0 models. Do NOT use BRIA RMBG-1.4 / RMBG-2.0 (non-commerci
 | Base model | `schirrmacher/ormbg` |
 | License | **Apache-2.0** |
 | On-disk size | uint8: 44.3 MB · fp16: 88.1 MB · fp32: 176 MB |
-| Backend used | WASM (uint8) — WebGPU (fp16) on supported hardware |
+| Backend used | WASM (uint8). WebGPU disabled — see note below |
 | Cold-load time | ~6.7s (browser-cached); first download ~44 MB over network |
 | Per-image time | ~4.2s on 512×341 WASM |
 | Hair-edge artifacts | Visual check pending (`tests/output/hair-mask.png` — see eyeball step) |
@@ -29,7 +29,19 @@ npm run download:model
 Files written:
 - `public/models/onnx-community/ormbg-ONNX/config.json`
 - `public/models/onnx-community/ormbg-ONNX/preprocessor_config.json`
-- `public/models/onnx-community/ormbg-ONNX/onnx/model_quantized.onnx`
+- `public/models/onnx-community/ormbg-ONNX/onnx/model_uint8.onnx`
+- `public/models/onnx-community/ormbg-ONNX/onnx/model_fp16.onnx`
+
+### WebGPU status (verified 2026-06, ship check)
+
+ORMBG **cannot run on ort-web's WebGPU (JSEP) backend** today. The model loads
+and `model_fp16.onnx` is fetched, but inference fails with
+`using ceil() in shape computation is not yet supported for MaxPool` — an
+ort-web operator gap, reproduced on real hardware (AMD RX 5600 XT, headed
+Chrome, cross-origin-isolated page). `detectBackend()` therefore skips the
+WebGPU probe (`WEBGPU_ENABLED = false` in `src/inference.ts`) so WebGPU-capable
+visitors don't download the 88 MB fp16 model just to hit the error. Re-test and
+flip the flag when ort-web adds ceil-mode MaxPool support.
 
 **Without this step:** inference.ts falls back to the HuggingFace CDN automatically.
 Offline use then requires the browser's own HTTP cache to have warmed up.

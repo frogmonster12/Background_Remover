@@ -26,6 +26,14 @@ wasmEnv['wasmPaths'] = '/ort/';
 let _pipe: any = null;
 let _activeBackend: InferenceBackend | null = null;
 
+// ORMBG cannot run on ort-web's WebGPU (JSEP) backend today: the model loads,
+// but inference fails with "using ceil() in shape computation is not yet
+// supported for MaxPool" — an ort-web operator gap, verified on real hardware
+// (AMD RX 5600 XT, Chrome headed, cross-origin-isolated, 2026-06). Flip this
+// once ort-web supports ceil-mode MaxPool; until then the probe is skipped so
+// WebGPU-capable visitors don't download the 88 MB fp16 model just to fail.
+const WEBGPU_ENABLED = false as boolean;
+
 /**
  * Probe for WebGPU support. Returns 'webgpu' if a GPU adapter is found,
  * otherwise 'wasm'.
@@ -36,6 +44,7 @@ let _activeBackend: InferenceBackend | null = null;
  */
 export async function detectBackend(): Promise<InferenceBackend> {
   if (__FORCE_WASM__) return 'wasm';
+  if (!WEBGPU_ENABLED) return 'wasm';
 
   if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
     try {

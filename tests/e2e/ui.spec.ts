@@ -116,8 +116,8 @@ test.describe('UI workspace', () => {
     await expect(page.locator('[role="main"]')).toBeVisible();
     // Controls aside label
     await expect(page.locator('aside[aria-label]')).toBeVisible();
-    // Dropzone has accessible name
-    await expect(page.locator('[data-testid="dropzone"]')).toHaveAttribute('aria-label');
+    // Dropzone has accessible name (labelled by its visible text nodes)
+    await expect(page.locator('[data-testid="dropzone"]')).toHaveAttribute('aria-labelledby');
     // Download button has accessible name
     await expect(page.locator('[data-testid="download-btn"]')).toHaveAttribute('aria-label');
     // Live region exists

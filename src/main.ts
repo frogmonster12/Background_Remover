@@ -55,7 +55,7 @@ function buildHTML(): string {
     </button>
   </header>
 
-  <main class="main-layout" role="main">
+  <main class="main-layout" id="single-panel" role="main">
 
     <div class="canvas-area">
 
@@ -64,13 +64,13 @@ function buildHTML(): string {
         id="dropzone"
         role="button"
         tabindex="0"
-        aria-label="Drop an image here, or press Enter to browse files"
+        aria-labelledby="dropzone-title dropzone-hint browse-btn"
         data-testid="dropzone"
       >
         <div class="dropzone-content">
           <div class="dropzone-icon">${I.upload}</div>
-          <p class="dropzone-title">Drop your image here</p>
-          <p class="dropzone-hint">PNG · JPG · WebP</p>
+          <p class="dropzone-title" id="dropzone-title">Drop your image here</p>
+          <p class="dropzone-hint" id="dropzone-hint">PNG · JPG · WebP</p>
           <button class="browse-btn" id="browse-btn" type="button" tabindex="-1">
             Browse files
           </button>
@@ -247,7 +247,7 @@ function buildHTML(): string {
           id="download-btn"
           class="download-btn"
           disabled
-          aria-label="Download result as PNG"
+          aria-label="Download PNG"
           aria-disabled="true"
           data-testid="download-btn"
         >
@@ -258,7 +258,7 @@ function buildHTML(): string {
           id="download-jpeg-btn"
           class="download-btn download-btn--secondary"
           disabled
-          aria-label="Download result as JPEG"
+          aria-label="Download JPEG"
           aria-disabled="true"
           data-testid="download-jpeg-btn"
           hidden
