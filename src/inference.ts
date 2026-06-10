@@ -55,6 +55,41 @@ wasmEnv['wasmPaths'] = APP_BASE + 'ort/';
 const _pipes = new Map<ModelKind, any>();
 let _activeBackend: InferenceBackend | null = null;
 
+// Map a registry dtype to the ONNX filename transformers.js will request.
+function onnxFileFor(dtype: 'uint8' | 'fp16' | 'fp32'): string {
+  return dtype === 'fp32' ? 'onnx/model.onnx' : `onnx/model_${dtype}.onnx`;
+}
+
+/**
+ * Check whether the self-hosted weights for a model are actually present.
+ *
+ * Dev/preview servers answer requests for MISSING files with the SPA shell —
+ * HTTP 200 + text/html — so transformers.js never sees a 404 and never falls
+ * back to the Hugging Face CDN; it tries to parse HTML as ONNX and dies.
+ * This probe treats "not ok" OR "text/html for a non-HTML asset" as absent.
+ * Uses a 1-byte Range request so probing a 44–88 MB file costs nothing.
+ */
+async function localModelPresent(spec: ModelSpec, backend: InferenceBackend): Promise<boolean> {
+  const files = ['config.json', 'preprocessor_config.json', onnxFileFor(spec.dtype[backend])];
+  for (const file of files) {
+    const url = `${env.localModelPath}${spec.id}/${file}`;
+    try {
+      const res = await fetch(url, { headers: { Range: 'bytes=0-0' } });
+      const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
+      void res.body?.cancel();
+      if (!res.ok || contentType.includes('text/html')) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Loads are serialized because the local-vs-remote decision mutates the
+// GLOBAL transformers.js env flags; two concurrent loads (e.g. switching
+// models while the first is still downloading) must not interleave.
+let _loadChain: Promise<unknown> = Promise.resolve();
+
 // ORMBG cannot run on ort-web's WebGPU (JSEP) backend today: the model loads,
 // but inference fails with "using ceil() in shape computation is not yet
 // supported for MaxPool" — an ort-web operator gap, verified on real hardware
@@ -98,6 +133,16 @@ export async function loadModel(
   preferredBackend: InferenceBackend,
   onProgress?: (progress: number) => void,
 ): Promise<InferenceBackend> {
+  const run = _loadChain.then(() => loadModelSerialized(model, preferredBackend, onProgress));
+  _loadChain = run.catch(() => { /* a failed load must not block the next one */ });
+  return run;
+}
+
+async function loadModelSerialized(
+  model: ModelKind,
+  preferredBackend: InferenceBackend,
+  onProgress?: (progress: number) => void,
+): Promise<InferenceBackend> {
   if (_pipes.has(model) && _activeBackend !== null) return _activeBackend;
 
   const spec = MODEL_REGISTRY[model];
@@ -110,6 +155,17 @@ export async function loadModel(
   } : undefined;
 
   const tryLoad = async (backend: InferenceBackend) => {
+    // Decide local vs CDN per load. Without the probe, a dev server's
+    // 200-HTML answer for missing local files would mask the 404 and the
+    // CDN fallback would never fire (fresh clone without download:model).
+    const useLocal = await localModelPresent(spec, backend);
+    env.allowLocalModels = useLocal;
+    if (!useLocal) {
+      console.info(
+        `[Cutout] self-hosted weights for ${spec.id} not found under ` +
+        `${env.localModelPath} — fetching from the Hugging Face CDN (one-time).`,
+      );
+    }
     const pipe = await pipeline('background-removal', spec.id, {
       device: backend,
       dtype: spec.dtype[backend],
@@ -127,18 +183,44 @@ export async function loadModel(
       _pipes.delete(model);
       await tryLoad('wasm');
     } else {
-      const detail = err instanceof Error ? err.message : String(err);
-      throw new Error(
-        `WASM model load failed for ${spec.id}. ` +
-        `Underlying error: ${detail}. ` +
-        `If "shared is disabled" appears above, the page lacks Cross-Origin-Isolation ` +
-        `(COOP + COEP headers). If "404" appears, a model file is missing from /models/.`
-      );
+      throw new Error(describeLoadFailure(spec, err));
     }
   }
 
   if (_activeBackend === null) throw new Error('loadModel: backend still null after load attempt');
   return _activeBackend;
+}
+
+/**
+ * Build an honest, cause-specific load-failure message. Three cases:
+ *  (a) cross-origin isolation actually missing — the only time COEP is blamed
+ *  (b) model files unreachable (404 / HTML masquerade / network) — names the
+ *      model and where it was looked for
+ *  (c) anything else — surfaces the real underlying error
+ */
+function describeLoadFailure(spec: ModelSpec, err: unknown): string {
+  const detail = err instanceof Error ? err.message : String(err);
+  const isolated = (self as { crossOriginIsolated?: boolean }).crossOriginIsolated === true;
+
+  if (!isolated) {
+    return (
+      `Model load failed for ${spec.id}: this page is not cross-origin isolated, ` +
+      `so multithreaded WASM is unavailable (COOP/COEP headers missing). ` +
+      `Underlying error: ${detail}`
+    );
+  }
+
+  const looksLikeMissingFile =
+    /404|not found|unexpected token|<!doctype|failed to fetch|networkerror|could not locate/i.test(detail);
+  if (looksLikeMissingFile) {
+    return (
+      `Model files for ${spec.id} could not be loaded — not present under ` +
+      `${env.localModelPath}${spec.id}/ and the Hugging Face CDN fetch failed ` +
+      `(offline, blocked, or repo unavailable). Underlying error: ${detail}`
+    );
+  }
+
+  return `Model load failed for ${spec.id}. Underlying error: ${detail}`;
 }
 
 /** Return the backend the pipelines run on (null if nothing loaded). */

@@ -19,7 +19,8 @@
     "lint": "eslint src",
     "copy:ort": "node -e \"const fs=require('fs'),p=require('path'),s='node_modules/@huggingface/transformers/dist',d='public/ort';fs.mkdirSync(d,{recursive:true});fs.readdirSync(s).filter(f=>f.startsWith('ort-wasm')).forEach(f=>fs.copyFileSync(p.join(s,f),p.join(d,f)));console.log('ORT WASM copied to public/ort/');\"",
     "download:model": "node scripts/download-model.mjs",
-    "verify:sw": "node scripts/verify-sw.mjs"
+    "verify:sw": "node scripts/verify-sw.mjs",
+    "verify:fallback": "node scripts/verify-fallback.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.1",

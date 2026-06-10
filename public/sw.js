@@ -35,7 +35,9 @@ function withCOI(response) {
 
 // Decide whether a response is safe to put in the cache for this request.
 function shouldCache(request, response) {
-  if (!response || !response.ok) return false;
+  // Exactly 200 — cache.put() throws on partial (206) responses, which the
+  // model-presence probe (Range: bytes=0-0 in inference.ts) can produce.
+  if (!response || response.status !== 200) return false;
 
   const contentType = (response.headers.get('content-type') || '').toLowerCase();
   const isHTML = contentType.includes('text/html');
