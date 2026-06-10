@@ -275,6 +275,13 @@ function buildHTML(): string {
     ${I.wifi_off}
     You're offline — previously processed images and cached results still work
   </div>
+  <div class="update-bar" id="update-bar" role="status" aria-live="polite" data-testid="update-bar">
+    ${I.refreshCw}
+    <span>A new version is ready.</span>
+    <button id="update-reload-btn" class="update-reload-btn" aria-label="Reload to use the new version">
+      Reload
+    </button>
+  </div>
 </div>`;
 }
 
@@ -968,10 +975,23 @@ syncOffline();
 window.addEventListener('online',  syncOffline);
 window.addEventListener('offline', syncOffline);
 
-// ── Service worker registration ───────────────────────────────────────────
+// ── Service worker registration + update notice ──────────────────────────
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    // True only when an SW already controlled this page at load time —
+    // distinguishes a version update from the very first install
+    // (clients.claim() fires controllerchange in both cases).
+    const hadController = navigator.serviceWorker.controller !== null;
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController) return;
+      const updateBar  = document.getElementById('update-bar')!;
+      const reloadBtn  = document.getElementById('update-reload-btn')!;
+      updateBar.classList.add('visible');
+      reloadBtn.addEventListener('click', () => window.location.reload(), { once: true });
+    });
+
     navigator.serviceWorker.register('/sw.js').catch(() => {
       // SW registration fails silently — app still works online
     });

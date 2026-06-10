@@ -1,9 +1,19 @@
-// Cutout service worker — v2.0.0
-// Strategy: cache-first + network-update for all same-origin GETs.
+// Cutout service worker
+//
+// Strategy: cache-first with background refresh for same-origin GETs.
 // Also injects COEP/COOP headers on navigation responses so
 // SharedArrayBuffer (ORT multithreading) works on GitHub Pages.
+//
+// Cache-poisoning protection (the v2.0.0 cache had none and could serve a
+// stale SPA-fallback HTML page for model/wasm URLs forever):
+//   1. CACHE_VERSION is bumped on every release; `activate` deletes all
+//      caches that don't match, then claims open clients.
+//   2. A response is only cached when it is 2xx AND its content-type is
+//      plausible for the request — text/html is never cached for an asset
+//      request like *.onnx or *.wasm.
 
-const CACHE = 'cutout-v2.0.0';
+const CACHE_VERSION = 'v2.0.1';
+const CACHE = `cutout-${CACHE_VERSION}`;
 
 // Inject cross-origin isolation headers onto a response.
 // This lets ORT WASM use SharedArrayBuffer even on hosts that
@@ -23,7 +33,43 @@ function withCOI(response) {
   });
 }
 
+// Decide whether a response is safe to put in the cache for this request.
+function shouldCache(request, response) {
+  if (!response || !response.ok) return false;
+
+  const contentType = (response.headers.get('content-type') || '').toLowerCase();
+  const isHTML = contentType.includes('text/html');
+  const pathname = new URL(request.url).pathname.toLowerCase();
+  const extMatch = pathname.match(/\.([a-z0-9]+)$/);
+  const ext = extMatch ? extMatch[1] : null;
+
+  // Navigations, explicit .html requests, and directory paths expect HTML.
+  if (request.mode === 'navigate') return true;
+  if (ext === 'html' || pathname.endsWith('/')) return true;
+
+  // Any other extension receiving HTML means the server fell back to the
+  // SPA shell (or an error page) — never cache that.
+  if (isHTML) return false;
+  if (ext === null) return true;
+
+  // Critical binaries get a stricter check. An empty content-type is
+  // tolerated because some static hosts omit the header.
+  if (ext === 'onnx') {
+    return contentType === ''
+      || contentType.includes('octet-stream')
+      || contentType.includes('onnx');
+  }
+  if (ext === 'wasm') {
+    return contentType === ''
+      || contentType.includes('wasm')
+      || contentType.includes('octet-stream');
+  }
+  return true;
+}
+
 self.addEventListener('install', () => {
+  // Activate immediately instead of waiting for every old tab to close,
+  // so a fixed SW can replace a broken one on the next load.
   self.skipWaiting();
 });
 
@@ -47,27 +93,20 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.open(CACHE).then((cache) =>
       cache.match(req).then((cached) => {
-        // Always try network to refresh the cache
-        const networkFetch = fetch(req)
-          .then((response) => {
-            if (response.ok) cache.put(req, response.clone());
-            return isNavigation ? withCOI(response) : response;
-          })
-          .catch(() => {
-            if (cached) return isNavigation ? withCOI(cached) : cached;
-            return Response.error();
-          });
+        const refresh = fetch(req).then((response) => {
+          if (shouldCache(req, response)) cache.put(req, response.clone());
+          return response;
+        });
 
-        // Cache-first: serve cached immediately while updating in background
         if (cached) {
-          // Still update cache in background
-          fetch(req)
-            .then((res) => { if (res.ok) cache.put(req, res.clone()); })
-            .catch(() => {/* offline — ignore */});
+          // Cache-first: serve immediately, refresh in the background.
+          event.waitUntil(refresh.catch(() => {/* offline — ignore */}));
           return isNavigation ? withCOI(cached) : cached;
         }
 
-        return networkFetch;
+        return refresh
+          .then((response) => (isNavigation ? withCOI(response) : response))
+          .catch(() => Response.error());
       }),
     ),
   );

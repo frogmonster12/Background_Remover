@@ -129,6 +129,30 @@ npm run build
 
 ---
 
+## Troubleshooting
+
+### The app loads but processing always fails (works in Incognito)
+
+Versions before v2.0.1 had a service worker that could cache a bad response
+(for example, an HTML error page stored under a model file's URL) and serve it
+forever. Updating to v2.0.1 or later fixes this automatically: the new service
+worker takes over on the next page load, deletes the old cache, and shows a
+"new version is ready" bar — click **Reload** and the app works again.
+
+If you need to recover manually (or want a guaranteed clean slate):
+
+1. Open DevTools (`F12`) → **Application** tab
+2. **Service Workers** → click **Unregister**
+3. **Storage** → click **Clear site data**
+4. Reload the page
+
+### First load is slow
+
+The model weights (~44 MB) download once and are then cached for offline use.
+Later visits load from cache.
+
+---
+
 ## Architecture
 
 ```

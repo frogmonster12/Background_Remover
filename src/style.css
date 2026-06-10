@@ -886,6 +886,48 @@ input[type='color']:focus-visible { outline: 2px solid var(--primary); outline-o
   transform: translateY(0);
 }
 
+/* ── Update notice (new SW took over) ────────────────────── */
+
+.update-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 52px;
+  background: var(--surface-3);
+  border-top: 1px solid var(--border-mid);
+  color: var(--on-surface);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  z-index: 110;
+  transform: translateY(100%);
+  transition: transform var(--t-md);
+}
+
+.update-bar.visible {
+  transform: translateY(0);
+}
+
+.update-reload-btn {
+  height: 44px;
+  padding: 0 18px;
+  background: var(--primary);
+  border: none;
+  border-radius: var(--r-sm);
+  color: var(--primary-fg);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  touch-action: manipulation;
+  transition: background var(--t);
+}
+
+.update-reload-btn:hover { background: var(--primary-hover); }
+.update-reload-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
 /* Mode tabs */
 .mode-tabs {
   display: flex;

@@ -1,5 +1,61 @@
 # Progress
 
+## Phase 10 — Service Worker Cache Fix (BLOCKER)
+
+**Status:** COMPLETE ✓ (v2.0.1)
+
+### Root cause (recap)
+The v2.0.0 SW was cache-first with no versioning or response validation. A
+SPA-fallback HTML response cached under a model/wasm URL was served forever.
+Incognito worked only because it has no registered SW.
+
+### Done
+- **`public/sw.js` rewritten:**
+  - `CACHE_VERSION = 'v2.0.1'` constant — bump on each release
+  - `activate`: deletes **every** cache not matching the current version (incl.
+    `transformers-cache`, which can also hold a poisoned entry) + `clients.claim()`
+  - `install`: `skipWaiting()` (already present) so the fixed SW replaces a broken one immediately
+  - `shouldCache(request, response)`: only caches `response.ok`; never caches
+    `text/html` for a non-HTML asset; `.onnx`/`.wasm` require a plausible binary
+    content-type (empty tolerated for static hosts that omit it)
+  - Fixed a pre-existing double-fetch bug (cache-hit path fired two network requests)
+- **Update affordance:** `#update-bar` ("A new version is ready." + Reload button,
+  44px target) shown on `controllerchange` — only when the page already had a
+  controller, so the very first install stays silent (`main.ts` + `style.css`)
+- **`README.md`:** Troubleshooting section — automatic recovery via v2.0.1 + manual
+  recovery (DevTools → Application → Unregister + Clear site data)
+- **`package.json`:** version 2.0.1; new `verify:sw` script
+- **Tests:**
+  - `tests/sw.test.ts` — 16 Vitest tests that load the real `public/sw.js` into a
+    mocked SW scope: activate deletes stale caches; never caches 404/500/HTML-for-
+    `.onnx`/`.wasm`; caches valid binaries; offline serves cached binary; an HTML
+    fallback can't overwrite a good cached binary; cross-origin/non-GET ignored
+  - `tests/e2e/sw.spec.ts` — 5 Playwright tests: registration + control; only the
+    current versioned cache exists; SPA-fallback for `.onnx` NOT cached (dev server
+    really serves 200 text/html for bogus `.onnx` URLs — the exact poison scenario);
+    stale-cache cleanup on SW update; update bar hidden by default
+  - `scripts/verify-sw.mjs` (`npm run verify:sw`) — full recovery rehearsal against
+    the built preview in a **persistent profile** (normal-profile equivalent):
+    old v2.0.0 SW + poisoned `cutout-v2.0.0` & `transformers-cache` → app broken →
+    swap in new sw.js (the "deploy") → update bar appears → reload → old caches
+    deleted → real-model removal works → offline reload → removal still works,
+    `crossOriginIsolated` preserved. **ALL 7 CHECKS PASSED.**
+
+### Trade-off (documented)
+Wiping all non-current caches on version bump deletes `transformers-cache`, so the
+model re-downloads once per release (same-origin static fetch when self-hosted).
+This is what guarantees recovery from any poisoned state without manual clearing.
+
+### Verification PASS ✓
+- `typecheck`: 0 errors ✓
+- `lint`: 0 errors ✓
+- `test` (Vitest): 69/69 ✓ (16 new SW tests)
+- `test:e2e` (Playwright): 48/48 ✓ (5 new SW tests)
+- `npm run build`: dist/sw.js contains `CACHE_VERSION = 'v2.0.1'` + `shouldCache` ✓
+- `verify:sw` (real model, persistent profile, normal-profile equivalent): 7/7 ✓
+
+---
+
 ## Phase 9 — Manual Touch-up Brush
 
 **Status:** COMPLETE ✓
